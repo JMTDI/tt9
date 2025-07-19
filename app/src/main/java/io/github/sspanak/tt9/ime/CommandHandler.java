@@ -1,6 +1,11 @@
 package io.github.sspanak.tt9.ime;
 
+import android.content.Context;
 import android.view.KeyEvent;
+import android.view.inputmethod.InputMethodInfo;
+import android.view.inputmethod.InputMethodManager;
+
+import java.util.List;
 
 import io.github.sspanak.tt9.R;
 import io.github.sspanak.tt9.db.words.DictionaryLoader;
@@ -57,7 +62,7 @@ abstract public class CommandHandler extends TextEditingHandler {
 				addWord();
 				break;
 			case 3:
-				toggleVoiceInput();
+				switchToFutoVoiceInput();
 				break;
 			case 4:
 				undo();
@@ -135,6 +140,45 @@ abstract public class CommandHandler extends TextEditingHandler {
 			switchInputMethod(SystemSettings.getPreviousIME(this));
 		} catch (Exception e) {
 			Logger.d(getClass().getSimpleName(), "Could not switch to previous input method. " + e);
+		}
+	}
+
+
+	public void switchToFutoVoiceInput() {
+		suggestionOps.cancelDelayedAccept();
+		stopVoiceInput();
+		
+		try {
+			// First check if FUTO Voice Input is installed and enabled
+			InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+			if (imm != null) {
+				List<InputMethodInfo> enabledIMEs = imm.getEnabledInputMethodList();
+				boolean futoFound = false;
+				
+				for (InputMethodInfo ime : enabledIMEs) {
+					if (ime.getPackageName().equals("org.futo.voiceinput")) {
+						// Found FUTO, switch to it
+						String imeId = ime.getId(); // This will be something like "org.futo.voiceinput/.VoiceInputMethodService"
+						switchInputMethod(imeId);
+						futoFound = true;
+						UI.toast(this, "Switching to FUTO Voice Input");
+						break;
+					}
+				}
+				
+				if (!futoFound) {
+					// FUTO not found, show user-friendly message
+					UI.toast(this, "FUTO Voice Input not installed or enabled");
+					// Optionally still show keyboard picker
+					UI.showChangeKeyboardDialog(this);
+				}
+			}
+			
+		} catch (Exception e) {
+			Logger.d(getClass().getSimpleName(), "Could not switch to FUTO Voice Input IME: " + e);
+			UI.toast(this, "Error switching to FUTO Voice Input");
+			// Fallback to keyboard selection dialog
+			UI.showChangeKeyboardDialog(this);
 		}
 	}
 
