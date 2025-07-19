@@ -63,8 +63,27 @@ class Wrapper {
 
 
 	static def sha256(String filePath) {
-		def parts = "sha256sum $filePath".execute().text.trim().split(" ")
-		return parts.length > 0 ? parts[0] : ""
+		try {
+			// Try Windows certutil command first
+			if (System.getProperty("os.name").toLowerCase().contains("windows")) {
+				def process = "certutil -hashfile \"$filePath\" SHA256".execute()
+				def output = process.text.trim()
+				// certutil output format: hash appears on second line
+				def lines = output.split("\n")
+				if (lines.length >= 2) {
+					return lines[1].replaceAll("\\s", "").toLowerCase()
+				}
+			} else {
+				// Use sha256sum on Unix/Linux systems
+				def parts = "sha256sum $filePath".execute().text.trim().split(" ")
+				if (parts.length > 0) {
+					return parts[0]
+				}
+			}
+		} catch (Exception e) {
+			println "Warning: Could not calculate SHA256 for $filePath: ${e.message}"
+		}
+		return ""
 	}
 }
 
