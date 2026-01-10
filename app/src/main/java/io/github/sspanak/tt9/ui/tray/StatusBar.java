@@ -73,7 +73,7 @@ public class StatusBar {
 
 
 	public void setText(VoiceInputOps voiceInputOps) {
-		setText("[ " + voiceInputOps.toString() + " ]");
+		setText(voiceInputOps.toString());
 	}
 
 

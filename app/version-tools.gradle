@@ -35,12 +35,11 @@ ext.exec = { command ->
 }
 
 ext.getVersionName = { ->
-	return generateVersionName()
+	return "59.0"
 }
 
 ext.getVersionCode = { ->
-	String commitsCount = execThing("git rev-list --count HEAD")
-	return Integer.valueOf(commitsCount)
+	return 59
 }
 
 ext.getDebugVersion = { ->

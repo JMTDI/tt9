@@ -134,6 +134,15 @@ android {
 		targetCompatibility JavaVersion.VERSION_17
 	}
 
+	// NDK configuration for Whisper C++ library
+	ndkVersion '28.2.13676358'
+	externalNativeBuild {
+		cmake {
+			path 'src/main/cpp/CMakeLists.txt'
+			version '3.22.1'
+		}
+	}
+
 	flavorDimensions = ['app']
 	productFlavors {
 		full {
@@ -150,6 +159,16 @@ android {
 			dimension 'app'
 			buildConfigField 'Boolean', 'LITE', 'true'
 			buildConfigField 'Boolean', 'PREMIUM', 'true'
+		}
+	}
+
+	// Make lite and premium flavors share full's source files
+	sourceSets {
+		lite {
+			java.srcDirs += 'src/full/java'
+		}
+		premium {
+			java.srcDirs += 'src/full/java'
 		}
 	}
 

@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:tools="http://schemas.android.com/tools"
-	android:versionCode="1449"
+	android:versionCode="59"
 	android:versionName="59.0"
 	xmlns:android="http://schemas.android.com/apk/res/android">
 
 	<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/> <!-- allows displaying notifications on Android >= 13 -->
 	<uses-permission android:name="android.permission.RECORD_AUDIO"/> <!-- allows voice input -->
+	<uses-permission android:name="android.permission.INTERNET"/> <!-- allows downloading multilingual models -->
+	<uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" /> <!-- allows Bluetooth headset voice input on Android < 12 -->
+	<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" /> <!-- allows Bluetooth headset voice input on Android >= 12 -->
 	<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" /> <!-- allows words exporting on Android < 10 -->
 
 	<queries>
