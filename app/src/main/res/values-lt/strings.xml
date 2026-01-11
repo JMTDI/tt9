@@ -10,11 +10,13 @@
 	<string name="add_word_add">Pridėti</string>
 	<string name="add_word_confirm">Pridėti žodį \"%1$s\" į \"%2$s\" žodyną?</string>
 	<string name="add_word_no_selection">Perkelkite žymeklį prie žodžio kurį norite pridėti.</string>
+	<string name="add_word_not_available_without_predictive_mode">Žodžių pridėti negalima, kai nuspėjamumas yra išjungtas.</string>
 	<string name="add_word_blank">Negalima pridėti tuščio žodžio.</string>
 	<string name="add_word_exist">Žodis \"%1$s\" jau yra žodyne.</string>
 	<string name="add_word_success">Žodis \"%1$s\" pridėtas.</string>
 	<string name="add_word_title">Pridėti žodį</string>
 
+	<string name="commands_clipboard_is_empty">Iškarpinė tuščia.</string>
 	<string name="commands_select_command">Pasirinkti komandą</string>
 	<string name="pref_category_about">Apie programėlę</string>
 	<string name="pref_category_abc_mode">ABC metodas</string>
@@ -99,7 +101,7 @@
 	<string name="dictionary_truncated">Žodynas sėkmingai ištrintas.</string>
 	<string name="dictionary_truncating">Ištrinama…</string>
 
-	<string name="function_add_word_not_available">Žodžių pridėjimas šia kalba nėra galimas.</string>
+	<string name="add_word_not_available_in_language">Žodžių pridėjimas šia kalba nėra galimas.</string>
 	<string name="function_backspace">Trinti</string>
 	<string name="function_show_command_palette">Rodyti komandų sąrašą</string>
 	<string name="function_filter_clear">Panaikinti filtrą</string>
@@ -126,7 +128,7 @@
 	<string name="setup_click_here_to_enable">Spauskite čia norėdami įjungti „TT9“ per „Android“ nustatymus.</string>
 
 	<string name="setup_spell_checker">Sistemos rašybos tikrintuvas</string>
-	<string name="setup_spell_checker_on">Sistemos rašybos tikrintuvas gali trukdyti pridėti žodžius. Spustelėkite čia, kad išjungtumėte.</string>
+	<string name="setup_spell_checker_on">Sistemos rašybos tikrintuvas pabraukia tekstą raudonai ir gali neleisti pridėti naujų žodžių. Palieskite, kad išjungtumėte.</string>
 	<string name="setup_spell_checker_off">Išjungtas</string>
 	<string name="key_key">Klavišas</string>
 	<string name="key_hold_key">(laikyti nuspaudus)</string>

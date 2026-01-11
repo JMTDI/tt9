@@ -7,10 +7,12 @@
 	<string name="error_unexpected">Произошла непредвиденная ошибка.</string>
 	<string name="add_word_add">Добавить</string>
 	<string name="add_word_no_selection">Переместите курсор внутрь слова, чтобы добавить его.</string>
+	<string name="add_word_not_available_without_predictive_mode">Добавление слов невозможно, когда режим подсказки отключён.</string>
 	<string name="add_word_blank">Невозможно добавить слово.</string>
 	<string name="add_word_exist">Слово «%1$s» уже есть в словаре.</string>
 	<string name="add_word_success">«%1$s» добавлено</string>
 	<string name="add_word_title">Добавить слово</string>
+	<string name="commands_clipboard_is_empty">Буфер обмена пуст.</string>
 	<string name="commands_select_command">Выбрать команду</string>
 	<string name="pref_category_about">О приложении</string>
 	<string name="pref_hold_to_type_summary">Позволяет вводить цифры или запускать функции приложения при удержании цифровых клавиш. Отключите, если устройство ошибочно распознаёт короткие нажатия как удержание.</string>
@@ -89,7 +91,7 @@
 	<string name="pref_double_tap_resize_summary">Дважды коснуться строки состояния, чтобы увеличить или уменьшить клавиатуру, когда нет подсказок.</string>
 	<string name="pref_double_zero_char">Символ при двойном нажатии клавиши 0</string>
 	<string name="dictionary_load_bad_char">Не удалось загрузить словарь. Проблема в слове в строке %1$d для языка «%2$s».</string>
-	<string name="function_add_word_not_available">Добавление слов невозможно на этом языке.</string>
+	<string name="add_word_not_available_in_language">Добавление слов невозможно на этом языке.</string>
 	<string name="function_backspace">Стереть</string>
 	<string name="function_show_command_palette">Список команд</string>
 	<string name="function_filter_clear">Удалить фильтр</string>
@@ -114,7 +116,7 @@
 	<string name="setup_tt9_off">%1$s отключен</string>
 	<string name="setup_click_here_to_enable">Нажмите здесь, чтобы включить TT9 в настройках Android.</string>
 	<string name="setup_spell_checker">Системная проверка орфографии</string>
-	<string name="setup_spell_checker_on">Системная проверка орфографии может мешать добавлению слов. Нажмите здесь, чтобы отключить.</string>
+	<string name="setup_spell_checker_on">Системная проверка орфографии подчёркивает текст красным и может мешать добавлению новых слов. Нажмите, чтобы отключить.</string>
 	<string name="setup_spell_checker_off">Отключена</string>
 	<string name="key_key">Клавиш</string>
 	<string name="key_hold_key">(зажать)</string>

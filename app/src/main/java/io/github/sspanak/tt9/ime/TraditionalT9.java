@@ -18,7 +18,6 @@ import io.github.sspanak.tt9.preferences.settings.SettingsStore;
 import io.github.sspanak.tt9.ui.UI;
 import io.github.sspanak.tt9.ui.dialogs.RequestPermissionDialog;
 import io.github.sspanak.tt9.util.Logger;
-import io.github.sspanak.tt9.util.sys.Clipboard;
 import io.github.sspanak.tt9.util.sys.DeviceInfo;
 import io.github.sspanak.tt9.util.sys.SystemSettings;
 
@@ -32,6 +31,9 @@ public class TraditionalT9 extends PremiumHandler {
 	@NonNull private final Handler heartbeatDetector = new Handler(Looper.getMainLooper());
 	private boolean isDead = false;
 	private int zombieChecks = 0;
+
+	// A String to be committed after successfully starting in an input field.
+	@NonNull private final StringBuffer onAfterStartText = new StringBuffer();
 
 
 	@Override
@@ -93,9 +95,16 @@ public class TraditionalT9 extends PremiumHandler {
 	public int onStartCommand(Intent intent, int flags, int startId) {
 		int result = super.onStartCommand(intent, flags, startId);
 
-		String wakeupCommand = intent != null ? intent.getStringExtra(UI.COMMAND_WAKEUP_MAIN) : null;
-		if (UI.COMMAND_WAKEUP_MAIN.equals(wakeupCommand)) {
-			forceShowWindow();
+		final String command = intent != null ? intent.getStringExtra(UI.COMMAND) : null;
+
+		switch (command == null ? "" : command) {
+			case UI.COMMAND_WAKEUP_MAIN -> forceShowWindow();
+			case UI.COMMAND_PRINT_VOICE_INPUT -> {
+				final String text = intent.getStringExtra(UI.COMMAND_PRINT_VOICE_INPUT_TEXT);
+				if (text != null) {
+					onAfterStartText.append(text);
+				}
+			}
 		}
 
 		return result;
@@ -140,7 +149,7 @@ public class TraditionalT9 extends PremiumHandler {
 			asyncInitThread = null;
 		}
 
-		appHacks.onBeforeStart(this, settings, mLanguage, field, restarting);
+		appHacks.onBeforeStart(this, settings, mLanguage, field, mInputMode, suggestionOps, restarting);
 
 		if (isDead || !super.onStart(field, restarting)) {
 			getDisplayTextCase();
@@ -156,7 +165,14 @@ public class TraditionalT9 extends PremiumHandler {
 			initUi(mInputMode);
 		}
 
-		InputType newInputType = new InputType(this, field);
+		onAfterStart(field);
+
+		return true;
+	}
+
+
+	private void onAfterStart(EditorInfo field) {
+		final InputType newInputType = new InputType(this, field);
 
 		if (newInputType.isText()) {
 			DataStore.loadWordPairs(DictionaryLoader.getInstance(this), LanguageCollection.getAll(settings.getEnabledLanguageIds()));
@@ -166,9 +182,12 @@ public class TraditionalT9 extends PremiumHandler {
 			DictionaryLoader.autoLoad(this, mLanguage);
 		}
 
-		askForNotifications();
+		if (onAfterStartText.length() > 0) {
+			onText(onAfterStartText.toString(), false);
+			onAfterStartText.setLength(0);
+		}
 
-		return true;
+		askForNotifications();
 	}
 
 
@@ -177,7 +196,6 @@ public class TraditionalT9 extends PremiumHandler {
 		stopVoiceInput();
 		onFinishTyping();
 		suggestionOps.clear();
-		Clipboard.clearListener(this);
 		statusBar.setText(mInputMode);
 
 		if (isInputViewShown()) {

@@ -9,11 +9,13 @@
 	<string name="add_word_add">הוסף</string>
 	<string name="add_word_confirm">האם להוסיף את המילה \"%1$s\" ל-%2$s?</string>
 	<string name="add_word_no_selection">הזיזו את הסמן בתוך מילה כדי להוסיף אותה.</string>
+	<string name="add_word_not_available_without_predictive_mode">לא ניתן להוסיף מילים כאשר מצב חיזוי מושבת.</string>
 	<string name="add_word_blank">מילה ריקה לא נוספה</string>
 	<string name="add_word_exist">המילה \"%1$s\" כבר קיימת במילון.</string>
 	<string name="add_word_success">%1$s נוסף.</string>
 	<string name="add_word_title">הוסף מילה</string>
 
+	<string name="commands_clipboard_is_empty">לוח הגזירים ריק.</string>
 	<string name="commands_select_command">לבחור פקודה</string>
 	<string name="pref_category_about">אודות</string>
 	<string name="pref_category_abc_mode">מצב אבג</string>
@@ -101,7 +103,7 @@
 	<string name="dictionary_truncated">המילון נמחק בהצלחה.</string>
 
 	<string name="dictionary_truncating">המחיקה מתבצעת…</string>
-	<string name="function_add_word_not_available">אין אפשרות להוסיף מילים בשפה זו.</string>
+	<string name="add_word_not_available_in_language">אין אפשרות להוסיף מילים בשפה זו.</string>
 	<string name="function_backspace">לחצן מחיקה</string>
 	<string name="function_next_suggestion">ההצעה הבאה</string>
 	<string name="function_next_language">לחצן למעבר לשפה הבאה</string>
@@ -118,7 +120,7 @@
 	<string name="setup_tt9_off">%1$s מושבת</string>
 	<string name="setup_click_here_to_enable">לחץ כאן כדי להפעיל את TT9 מהגדרות Android.</string>
 	<string name="setup_spell_checker">בודק איות מערכת</string>
-	<string name="setup_spell_checker_on">בודק האיות של המערכת עלול להפריע להוספת מילים. לחץ כאן כדי להשבית.</string>
+	<string name="setup_spell_checker_on">בודק האיות של המערכת מדגיש טקסט בקו אדום ועלול למנוע הוספת מילים חדשות. הקש כדי להשבית.</string>
 	<string name="setup_spell_checker_off">מנוטרל</string>
 	<string name="key_key">לחצן</string>
 	<string name="key_hold_key">(החזק)</string>

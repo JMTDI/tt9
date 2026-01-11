@@ -7,11 +7,13 @@
 	<string name="add_word_add">Ekle</string>
 	<string name="add_word_confirm">\"%1$s\" kelimesi %2$s sözlüğe eklensin mi?</string>
 	<string name="add_word_no_selection">Ekleme yapmak için imleci eklemek istediğiniz kelimeye götürün.</string>
+	<string name="add_word_not_available_without_predictive_mode">Tahminli mod devre dışıyken kelime eklemek mümkün değildir.</string>
 	<string name="add_word_blank">Boşluk eklenemedi.</string>
 	<string name="add_word_exist">\"%1$s\" kelimesi zaten kelime listesinde mevcut.</string>
 	<string name="add_word_success">\"%1$s\" başarıyla eklendi.</string>
 	<string name="add_word_title">Kelime Ekle</string>
 
+	<string name="commands_clipboard_is_empty">Pano boş.</string>
 	<string name="commands_select_command">Bir komut seç</string>
 	<string name="pref_category_about">Hakkında</string>
 	<string name="pref_hold_to_type_summary">Sayı tuşlarını basılı tutarak rakam yazmaya veya uygulama işlevlerini etkinleştirmeye izin verir. Cihaz kısa basışları yanlışlıkla basılı tutma olarak algılıyorsa kapatın.</string>
@@ -78,14 +80,14 @@
 	<string name="pref_category_hacks">Uyumluluk</string>
 	<string name="dictionary_loading_indeterminate">Sözlüğü yükle</string>
 	<string name="pref_category_appearance">Görünüş</string>
-	<string name="pref_category_keypad_hardware">Donanım tuşları</string>
+	<string name="pref_category_keypad_hardware">Fiziksel tuşlar</string>
 	<string name="pref_category_keypad_onscreen">Ekran tuşları</string>
 	<string name="pref_category_predictive_mode">Tahmin modu</string>
 	<string name="pref_category_function_keys">Klavye Kısayolları</string>
 	<string name="pref_category_key_appearance">Tuşlar</string>
 	<string name="pref_category_keypad">Tuş Takımı</string>
 	<string name="char_space">Boşluk</string>
-	<string name="function_add_word_not_available">Bu dilde kelime eklemek mümkün değil.</string>
+	<string name="add_word_not_available_in_language">Bu dilde kelime eklemek mümkün değil.</string>
 	<string name="function_backspace">Geri Tuşu</string>
 	<string name="punctuation_order_after_group">Gruptan sonra (isteğe bağlı)</string>
 	<string name="setup_keyboard_status">Durum</string>
@@ -94,7 +96,7 @@
 	<string name="setup_tt9_off">%1$s devre dışı</string>
 	<string name="setup_click_here_to_enable">Android ayarlarında TT9 uygulamasını etkinleştirmek için burayı tıklayın.</string>
 	<string name="setup_spell_checker">Sistem Yazım Denetleyicisi</string>
-	<string name="setup_spell_checker_on">Sistem yazım denetleyicisi kelime eklemeye müdahale edebilir. Devre dışı bırakmak için buraya tıklayın.</string>
+	<string name="setup_spell_checker_on">Sistem yazım denetleyicisi metni kırmızıyla altı çizili gösterir ve yeni kelimeler eklemeyi engelleyebilir. Devre dışı bırakmak için dokunun.</string>
 	<string name="setup_spell_checker_off">Devre dışı</string>
 	<string name="key_back">Geri</string>
 	<string name="key_call">Ara</string>

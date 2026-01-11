@@ -14,15 +14,17 @@ import io.github.sspanak.tt9.preferences.settings.SettingsStore;
 
 public class Clipboard {
 	@NonNull private static final LinkedList<CharSequence> clips = new LinkedList<>();
-	private static Runnable externalChangeListener;
-	private static boolean ignoreNextChange = false;
 
 
 	public static void copy(@NonNull Context context, @NonNull CharSequence label, @NonNull CharSequence text) {
 		ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
 		clipboard.setPrimaryClip(ClipData.newPlainText(label, text));
 		addClip(text);
-		ignoreNextChange = true;
+	}
+
+
+	public static boolean contains(@NonNull String text) {
+		return indexOf(text) != -1;
 	}
 
 
@@ -78,33 +80,6 @@ public class Clipboard {
 	}
 
 
-	public static void setOnChangeListener(@NonNull Context context, @Nullable Runnable newListener) {
-		ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
-
-		if (newListener != null) {
-			clipboard.addPrimaryClipChangedListener(Clipboard::changeListener);
-		} else if (externalChangeListener != null) {
-			clipboard.removePrimaryClipChangedListener(Clipboard::changeListener);
-		}
-
-		externalChangeListener = newListener;
-	}
-
-
-	public static void clearListener(@NonNull Context context) {
-		setOnChangeListener(context, null);
-	}
-
-
-	private static void changeListener() {
-		if (ignoreNextChange) {
-			ignoreNextChange = false;
-		} else if (externalChangeListener != null) {
-			externalChangeListener.run();
-		}
-	}
-
-
 	private static void addClip(@Nullable CharSequence text) {
 		if (text == null || text.length() == 0) {
 			return;
@@ -122,6 +97,10 @@ public class Clipboard {
 
 
 	private static int indexOf(@NonNull CharSequence text) {
+		if (text.length() == 0) {
+			return -1;
+		}
+
 		// indexOf on CharSequence compares references, so we have to search manually
 		for (int i = clips.size() - 1; i >= 0 ; i--) {
 			if (clips.get(i).toString().contentEquals(text)) {

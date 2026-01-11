@@ -7,11 +7,13 @@
 	<string name="add_word_add">Hinzufügen</string>
 	<string name="add_word_confirm">Wort \"%1$s\" zu %2$s hinzufügen?</string>
 	<string name="add_word_no_selection">Bewegen Sie den Cursor innerhalb eines Wortes, um es hinzuzufügen.</string>
+	<string name="add_word_not_available_without_predictive_mode">Das Hinzufügen von Wörtern ist nicht möglich, wenn die Textvorerkennung deaktiviert ist.</string>
 	<string name="add_word_blank">Leeres Wort nicht hinzugefügt.</string>
 	<string name="add_word_exist">Das Wort \"%1$s\" ist bereits in Wörterbuch.</string>
 	<string name="add_word_success">\"%1$s\" hinzugefügt.</string>
 	<string name="add_word_title">Wort hinzufügen</string>
 
+	<string name="commands_clipboard_is_empty">Die Zwischenablage ist leer.</string>
 	<string name="commands_select_command">Einen Befehl auswählen</string>
 	<string name="pref_category_about">Über die Anwendung</string>
 	<string name="pref_hold_to_type_summary">Ermöglicht, Zahlen zu tippen oder App-Funktionen zu starten, indem die Zahlentasten gehalten werden. Deaktivieren, wenn das Gerät kurze Tastendrücke fälschlicherweise als Halten erkennt.</string>
@@ -81,7 +83,7 @@
 	<string name="pref_category_hacks">Kompatibilität</string>
 	<string name="dictionary_loading_indeterminate">Lade Wörterbuch</string>
 	<string name="pref_category_appearance">Erscheinungsbild</string>
-	<string name="pref_category_keypad_hardware">Hardwaretasten</string>
+	<string name="pref_category_keypad_hardware">Physische Tasten</string>
 	<string name="pref_category_keypad_onscreen">Bildschirmtasten</string>
 	<string name="pref_category_predictive_mode">Textvorerkennung</string>
 	<string name="pref_category_function_keys">Tastenkürzel</string>
@@ -89,7 +91,7 @@
 	<string name="pref_category_keypad">Tastenfeld</string>
 	<string name="char_space">Leerzeichen</string>
 	<string name="function_add_word">Wort hinzufügen</string>
-	<string name="function_add_word_not_available">Das Hinzufügen von Wörtern ist in dieser Sprache nicht möglich.</string>
+	<string name="add_word_not_available_in_language">Das Hinzufügen von Wörtern ist in dieser Sprache nicht möglich.</string>
 	<string name="function_backspace">Rücktaste</string>
 	<string name="punctuation_order_after_group">Nach der Gruppe (optional)</string>
 	<string name="setup_keyboard_status">Status</string>
@@ -98,7 +100,7 @@
 	<string name="setup_tt9_off">%1$s ist deaktiviert</string>
 	<string name="setup_click_here_to_enable">Klicken Sie hier, um TT9 in den Android-Einstellungen zu aktivieren.</string>
 	<string name="setup_spell_checker">Systemrechtschreibprüfung</string>
-	<string name="setup_spell_checker_on">Die Systemrechtschreibprüfung kann das Hinzufügen von Wörtern beeinträchtigen. Klicken Sie hier, um sie zu deaktivieren.</string>
+	<string name="setup_spell_checker_on">Die System-Rechtschreibprüfung unterstreicht Text rot und kann das Hinzufügen neuer Wörter verhindern. Tippen zum Deaktivieren.</string>
 	<string name="setup_spell_checker_off">Deaktiviert</string>
 	<string name="key_back">Zurück</string>
 	<string name="key_call">Anruf</string>

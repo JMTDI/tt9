@@ -9,11 +9,13 @@
 	<string name="add_word_add">Adicionar</string>
 	<string name="add_word_confirm">Adicionar a palavra \"%1$s\" a %2$s?</string>
 	<string name="add_word_no_selection">Mova o cursor dentro de uma palavra para adicioná-la.</string>
+	<string name="add_word_not_available_without_predictive_mode">Não é possível adicionar palavras quando o modo preditivo está desativado.</string>
 	<string name="add_word_blank">Palavra em branco, impossível adicionar.</string>
 	<string name="add_word_exist">Palavra \"%1$s\" já está registrada.</string>
 	<string name="add_word_success">\"%1$s\" adicionada.</string>
 	<string name="add_word_title">Adicionar Palavra</string>
 
+	<string name="commands_clipboard_is_empty">A área de transferência está vazia.</string>
 	<string name="commands_select_command">Selecionar um comando</string>
 	<string name="pref_category_about">Sobre</string>
 	<string name="pref_category_abc_mode">Modo ABC</string>
@@ -94,7 +96,7 @@
 	<string name="dictionary_truncate_title">Limpar Dicionário</string>
 	<string name="dictionary_truncated">Dicionário apagado com sucesso.</string>
 
-	<string name="function_add_word_not_available">Não é possível adicionar palavras neste idioma.</string>
+	<string name="add_word_not_available_in_language">Não é possível adicionar palavras neste idioma.</string>
 	<string name="function_backspace">Backspace</string>
 	<string name="function_next_suggestion">Próxima Sugestão</string>
 	<string name="function_next_language">Próximo Idioma</string>
@@ -113,8 +115,8 @@
 	<string name="setup_tt9_on">%1$s está ativado</string>
 	<string name="setup_tt9_off">%1$s está desativado</string>
 	<string name="setup_click_here_to_enable">Clique aqui para ativar TT9 nas configurações do Android.</string>
-	<string name="setup_spell_checker">Verificador ortográfico do sistema</string>
-	<string name="setup_spell_checker_on">O verificador ortográfico do sistema pode interferir na adição de palavras. Clique aqui para desativá-lo.</string>
+	<string name="setup_spell_checker">Corretor ortográfico do sistema</string>
+	<string name="setup_spell_checker_on">O corretor ortográfico do sistema sublinha o texto em vermelho e pode impedir a adição de novas palavras. Toque para desativar.</string>
 	<string name="setup_spell_checker_off">Desativado</string>
 	<string name="key_key">Tecla</string>
 	<string name="key_hold_key">(segurar)</string>

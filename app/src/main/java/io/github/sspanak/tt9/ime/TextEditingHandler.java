@@ -4,9 +4,11 @@ import android.view.inputmethod.EditorInfo;
 
 import java.util.LinkedList;
 
+import io.github.sspanak.tt9.R;
 import io.github.sspanak.tt9.ime.modes.InputModeKind;
 import io.github.sspanak.tt9.languages.LanguageCollection;
 import io.github.sspanak.tt9.languages.LanguageKind;
+import io.github.sspanak.tt9.ui.UI;
 import io.github.sspanak.tt9.util.Ternary;
 import io.github.sspanak.tt9.util.sys.Clipboard;
 
@@ -130,6 +132,7 @@ abstract public class TextEditingHandler extends VoiceHandler {
 
 		LinkedList<CharSequence> clips = Clipboard.getAll(this);
 		if (clips.isEmpty()) {
+			UI.toast(this, R.string.commands_clipboard_is_empty);
 			return;
 		}
 
@@ -150,7 +153,6 @@ abstract public class TextEditingHandler extends VoiceHandler {
 		stopVoiceInput();
 
 		mainView.showTextEditingPalette();
-		Clipboard.setOnChangeListener(this, this::resetStatus);
 		resetStatus();
 	}
 
@@ -160,8 +162,12 @@ abstract public class TextEditingHandler extends VoiceHandler {
 			return false;
 		}
 
-		Clipboard.clearListener(this);
-		suggestionOps.acceptCurrent();
+		// paste any selected clipboard item and change its priority
+		String word = suggestionOps.acceptCurrent();
+		if (Clipboard.contains(word)) {
+			Clipboard.copy(this, word);
+		}
+
 		mainView.showKeyboard();
 		resetStatus();
 		return true;
