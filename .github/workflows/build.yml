@@ -1,7 +1,7 @@
 name: Build the Project
 
 on:
-  workflow_dispatch:  # Manual trigger only
+  workflow_dispatch:  # Manual trigger only - run from GitHub Actions UI
 
 jobs:
   build:
@@ -10,27 +10,27 @@ jobs:
     # setup
     - name: Checkout project sources
       uses: actions/checkout@v5
-      with:
-        lfs: true  # Enable Git LFS for large files
-    
     - name: Setup Java
       uses: actions/setup-java@v5
       with:
         distribution: temurin
         java-version: 21
-    
     - name: Setup Gradle
       uses: gradle/gradle-build-action@v3
-    
-    - name: Install NDK
-      run: echo "y" | sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;21.4.7075529"
-    
-    - name: Set NDK Path
-      run: echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/21.4.7075529" >> $GITHUB_ENV
 
-    # Build without validation (skip problematic tasks)
+    # validate and build
+    - name: Generate Documents
+      run: ./gradlew generateDocs
+    - name: Validate Dictionaries
+      run: ./gradlew validateLanguages
+    - name: Build Languages
+      run: ./gradlew buildDefinition buildDictionaryDownloads
+    - name: Copy Downloads
+      run: ./gradlew copyDownloadsToAssets
+    - name: Lint
+      run: ./gradlew lint
     - name: Build 'Lite' and 'Full' APK variants
-      run: ./gradlew assembleLiteRelease assembleFullRelease -x validateLanguages -x buildDictionaryDownloads -x lint
+      run: ./gradlew assembleLiteRelease assembleFullRelease
     
     # Upload APKs as artifacts
     - name: Upload Lite Release APK
