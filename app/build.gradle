@@ -164,6 +164,9 @@ android {
 
 	// Make lite and premium flavors share full's source files
 	sourceSets {
+	  main {
+      assets.srcDirs += 'src/main/ml'
+    }
 		lite {
 			java.srcDirs += 'src/full/java'
 		}
