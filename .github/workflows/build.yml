@@ -36,3 +36,18 @@ jobs:
       run: ./gradlew lint # this actually runs mergeResources, so it must come after the dictionary tasks
     - name: Build 'Lite' and 'Full' APK variants
       run: ./gradlew assembleLiteRelease assembleFullRelease
+    
+    # upload artifacts
+    - name: Upload Lite Release APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: TT9-Lite-Release
+        path: app/build/outputs/apk/lite/release/*.apk
+        retention-days: 30
+    
+    - name: Upload Full Release APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: TT9-Full-Release
+        path: app/build/outputs/apk/full/release/*.apk
+        retention-days: 30
