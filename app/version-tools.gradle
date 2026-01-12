@@ -39,7 +39,7 @@ ext.getVersionName = { ->
 }
 
 ext.getVersionCode = { ->
-	return 1456
+	return 1463
 }
 
 ext.getDebugVersion = { ->
