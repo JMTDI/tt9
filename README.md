@@ -70,13 +70,6 @@ As with many other open-source projects, this one is also maintained by its auth
 
 Your PRs are welcome!
 
-## 👍 Support
-The best way to support the project is to give it five stars on Google Play. While it may sound trivial, good reviews really motivate me to keep working on it. They also encourage the Play Store to promote TT9 to more people and ultimately help spread the word.
-
-You can also give the project a star on GitHub. Higher-ranked projects can access development tools for free and apply for funding more easily.
-
-And if you truly enjoy using TT9, buy me a beer on [Ko-Fi](https://ko-fi.com/sspanak) or [PayPal](https://www.paypal.com/donate/?hosted_button_id=LW97X3JM2CRZC).
-
 ## 💪 Philosophy
 - No spying, tracking, telemetry, reports, or data collection of any sort.
 - No ads or unnecessary bells and whistles. It only does its job, typing.
