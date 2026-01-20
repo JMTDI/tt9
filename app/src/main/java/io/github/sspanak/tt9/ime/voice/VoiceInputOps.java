@@ -41,10 +41,7 @@ public class VoiceInputOps {
 	private final static String LOG_TAG = VoiceInputOps.class.getSimpleName();
 
 	private static final int SAMPLE_RATE = 16000;
-	private static final int MAX_RECORDING_SECONDS = 30;
-	private static final int MAX_SAMPLES = SAMPLE_RATE * MAX_RECORDING_SECONDS;
-	private static final float SILENCE_THRESHOLD = 0.015f;
-	private static final int SILENCE_FRAMES_TO_STOP = 5; // ~300ms of silence (matches FUTO)
+	private static final int INITIAL_BUFFER_SIZE = 16000 * 60; // Start with 1 minute capacity
 
 	@NonNull private final Context ims;
 	@Nullable private Language language;
@@ -82,7 +79,7 @@ public class VoiceInputOps {
 		this.onStopListening = onStop != null ? onStop : result -> {};
 		this.onPartialResult = onPartial != null ? onPartial : result -> {};
 		this.onListeningError = onError != null ? onError : error -> {};
-		this.audioSamples = FloatBuffer.allocate(MAX_SAMPLES);
+		this.audioSamples = FloatBuffer.allocate(INITIAL_BUFFER_SIZE);
 	}
 
 	public boolean isAvailable() {
@@ -322,54 +319,43 @@ private void onPartialResultFromModel(String text) {
 }
 
 private void recordingLoop() {
-	short[] buffer = new short[1600]; // Match FUTO's buffer size
-		int silenceFrames = 0;
-		boolean hasSpeech = false;
+	short[] buffer = new short[1600];
 
-		try {
-			while (isListening && samplesRecorded < MAX_SAMPLES) {
-				int samplesRead = audioRecord.read(buffer, 0, buffer.length);
+	try {
+		while (isListening) {
+			int samplesRead = audioRecord.read(buffer, 0, buffer.length);
 
-				if (samplesRead > 0) {
-					// Convert to float and append
-					float[] floatSamples = AudioProcessor.shortToFloat(buffer);
+			if (samplesRead > 0) {
+				// Convert to float and append
+				float[] floatSamples = AudioProcessor.shortToFloat(buffer);
 
-					// Calculate magnitude for VAD
-					float magnitude = AudioProcessor.calculateMagnitude(floatSamples, 0, samplesRead);
+				// Check if we need to expand the buffer
+				if (samplesRecorded + samplesRead > audioSamples.capacity()) {
+					// Double the buffer size
+					int newCapacity = audioSamples.capacity() * 2;
+					Logger.d(LOG_TAG, "Expanding audio buffer from " + audioSamples.capacity() + " to " + newCapacity);
+					FloatBuffer newBuffer = FloatBuffer.allocate(newCapacity);
+					audioSamples.flip();
+					newBuffer.put(audioSamples);
+					audioSamples = newBuffer;
+				}
 
-					// Check for speech
-					if (magnitude > SILENCE_THRESHOLD) {
-						hasSpeech = true;
-						silenceFrames = 0;
-					} else if (hasSpeech) {
-						silenceFrames++;
-					}
-
-					// Append samples
-					for (int i = 0; i < samplesRead && samplesRecorded < MAX_SAMPLES; i++) {
-						audioSamples.put(floatSamples[i]);
-						samplesRecorded++;
-					}
-
-					// Stop if we've had enough silence after speech
-					if (hasSpeech && silenceFrames >= SILENCE_FRAMES_TO_STOP) {
-						Logger.d(LOG_TAG, "Detected end of speech");
-						stop();
-						break;
-					}
+				// Append samples
+				for (int i = 0; i < samplesRead; i++) {
+					audioSamples.put(floatSamples[i]);
+					samplesRecorded++;
 				}
 			}
-
-			// Stop recording and process
-			if (isListening) {
-				stop();
-			}
-
-		} catch (Exception e) {
-			Logger.e(LOG_TAG, "Error during recording: " + e.getMessage());
-			postError(new VoiceInputError(ims, VoiceInputError.ERROR_AUDIO_CAPTURE));
 		}
+
+		// Recording stopped manually by user
+		Logger.d(LOG_TAG, "Recording stopped by user");
+
+	} catch (Exception e) {
+		Logger.e(LOG_TAG, "Error during recording: " + e.getMessage());
+		postError(new VoiceInputError(ims, VoiceInputError.ERROR_AUDIO_CAPTURE));
 	}
+}
 
 	public void stop() {
 		if (!isListening) {
@@ -525,4 +511,3 @@ private void recordingLoop() {
 		return ims.getString(R.string.voice_input_listening);
 	}
 }
-
