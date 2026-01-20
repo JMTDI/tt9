@@ -68,7 +68,7 @@ abstract class UiHandler extends AbstractHandler {
 	}
 
 
-	public void initUi(InputMode inputMode) {
+	protected void initUi(InputMode inputMode) {
 		if (mainView.create()) {
 			initTray();
 			setCurrentView();
@@ -120,7 +120,7 @@ abstract class UiHandler extends AbstractHandler {
 			return;
 		}
 
-		final int resId = new StatusIcon(settings, mode, language, displayTextCase).resourceId;
+		final int resId = new StatusIcon(settings.isStatusIconEnabled() ? mode : null, language, displayTextCase).resourceId;
 		if (resId == 0) {
 			hideStatusIcon();
 		} else {

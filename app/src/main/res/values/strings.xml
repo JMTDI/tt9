@@ -127,6 +127,8 @@
 	<string name="pref_privacy_policy">Privacy Policy</string>
 	<string name="pref_quick_switch_language">Quick Switch Languages</string>
 	<string name="pref_quick_switch_language_summary">Pressing the Language key switches to the next language automatically, instead of showing a popup with all enabled languages.</string>
+	<string name="pref_show_suggestions_abc">Show Letter Suggestions</string>
+	<string name="pref_show_suggestions_abc_summary">Show possible letters in the suggestion bar when a key is pressed.</string>
 	<string name="pref_status_icon">Status Icon</string>
 	<string name="pref_status_icon_summary">Show an icon when keyboard input is active.</string>
 	<string name="pref_suggestion_font_size">Suggestion Font Size</string>
@@ -299,8 +301,8 @@
 	<string name="virtual_key_shift" translatable="false">Shift</string>
 	<string name="virtual_key_space_korean">Space</string>
 
-	<string name="voice_input_listening">Listening... (Press again to stop)</string>
-	<string name="voice_input_stopping">Processing...</string>
+	<string name="voice_input_listening">Speak</string>
+	<string name="voice_input_stopping">Turning off the microphone…</string>
 	<string name="voice_input_mic_permission_is_needed">You must allow the microphone permission to use voice input.</string>
 	<string name="voice_input_error_incompatible_voice_service">Incompatible voice assistant</string>
 	<string name="voice_input_error_generic">Voice input error</string>

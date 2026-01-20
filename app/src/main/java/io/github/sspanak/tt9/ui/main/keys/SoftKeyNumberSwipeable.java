@@ -6,6 +6,7 @@ import android.util.AttributeSet;
 import androidx.annotation.Nullable;
 
 import io.github.sspanak.tt9.R;
+import io.github.sspanak.tt9.commands.CmdFilterSuggestions;
 import io.github.sspanak.tt9.commands.CmdMoveCursor;
 import io.github.sspanak.tt9.commands.CmdNextInputMode;
 import io.github.sspanak.tt9.commands.CmdVoiceInput;
@@ -17,6 +18,7 @@ import io.github.sspanak.tt9.preferences.settings.SettingsStore;
 
 public class SoftKeyNumberSwipeable extends SoftKeyNumber {
 	private float previousX;
+	private String lastSwipeCommand = null;
 	private final Command[] swipeCommand = { null, null };
 	private boolean swipeCommandRan = false;
 
@@ -51,17 +53,17 @@ public class SoftKeyNumberSwipeable extends SoftKeyNumber {
 
 	@Override
 	protected int getCornerIcon(int position) {
-		return switch (position) {
-			case ICON_POSITION_BOTTOM_LEFT -> {
-				Command cmd = getSwipeCommand(true);
-				yield cmd != null ? cmd.getIcon() : -1;
-			}
-			case ICON_POSITION_BOTTOM_RIGHT -> {
-				Command cmd = getSwipeCommand(false);
-				yield cmd != null ? cmd.getIcon() : -1;
-			}
-			default -> -1;
+		final Command cmd = switch (position) {
+			case ICON_POSITION_BOTTOM_LEFT -> getSwipeCommand(true);
+			case ICON_POSITION_BOTTOM_RIGHT -> getSwipeCommand(false);
+			default -> null;
 		};
+
+		if (cmd instanceof CmdNextInputMode) {
+			((CmdNextInputMode) cmd).invalidateIcon(tt9);
+		}
+
+		return cmd != null ? cmd.getIcon() : super.getCornerIcon(position);
 	}
 
 
@@ -118,14 +120,22 @@ public class SoftKeyNumberSwipeable extends SoftKeyNumber {
 			return;
 		}
 
-		if (cmd != null) {
+		if (cmd instanceof CmdFilterSuggestions) {
+			swipeCommandRan = ((CmdFilterSuggestions) cmd).run(tt9, cmd.getId().equals(lastSwipeCommand));
+		} else if (cmd != null) {
 			swipeCommandRan = cmd.run(tt9);
 		}
+
+		lastSwipeCommand = cmd != null && swipeCommandRan ? cmd.getId() : null;
 	}
 
 
 	@Override
 	protected boolean handleRelease() {
+		if (!swipeCommandRan) {
+			lastSwipeCommand = null;
+		}
+
 		return swipeCommandRan || super.handleRelease();
 	}
 
