@@ -35,11 +35,11 @@ ext.exec = { command ->
 }
 
 ext.getVersionName = { ->
-	return "59.0.1"
+	return "59.0.2"
 }
 
 ext.getVersionCode = { ->
-	return 1470
+	return 1472
 }
 
 ext.getDebugVersion = { ->
