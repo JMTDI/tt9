@@ -301,8 +301,8 @@
 	<string name="virtual_key_shift" translatable="false">Shift</string>
 	<string name="virtual_key_space_korean">Space</string>
 
-	<string name="voice_input_listening">Listening… (Press again to stop)</string>
-	<string name="voice_input_stopping">Processing…</string>
+	<string name="voice_input_listening">Speak</string>
+	<string name="voice_input_stopping">Turning off the microphone…</string>
 	<string name="voice_input_mic_permission_is_needed">You must allow the microphone permission to use voice input.</string>
 	<string name="voice_input_error_incompatible_voice_service">Incompatible voice assistant</string>
 	<string name="voice_input_error_generic">Voice input error</string>
