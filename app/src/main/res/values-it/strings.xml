@@ -9,12 +9,12 @@
 	<string name="add_word_add">Aggiungere</string>
 	<string name="add_word_confirm">Aggiungi la parola \"%1$s\" a %2$s?</string>
 	<string name="add_word_no_selection">Sposta il cursore dentro un parola per aggiungerla.</string>
-	<string name="add_word_not_available_without_predictive_mode">L’aggiunta di parole non è possibile quando la scrittura facilitata è disattivata.</string>
 	<string name="add_word_blank">Nessuna parola da aggiungere.</string>
 	<string name="add_word_exist">Parola “%1$s” già nel dizionario.</string>
 	<string name="add_word_success">\"%1$s\" aggiunta.</string>
 	<string name="add_word_title">Aggiungi parola</string>
 
+	<string name="edit_word_no_selection">Sposta il cursore all’interno di una parola per modificarla.</string>
 	<string name="commands_clipboard_is_empty">Gli appunti sono vuoti.</string>
 	<string name="commands_select_command">Selezionare un comando</string>
 	<string name="pref_category_about">Sull\'applicazione</string>
@@ -58,6 +58,7 @@
 	<string name="pref_one_key_emoji_simple">Elenco breve</string>
 	<string name="pref_predict_word_pairs">Memorizzare coppie di parole</string>
 	<string name="pref_predict_word_pairs_summary">Ricordare frasi comunemente usate per migliorare i suggerimenti di parole.</string>
+	<string name="pref_predictive_auto_accept">Selezione automatica delle parole</string>
 	<string name="pref_privacy_policy">Informativa sulla privacy</string>
 	<string name="pref_quick_switch_language_summary">Premendo il tasto della lingua si passa automaticamente alla lingua successiva invece di mostrare un popup con tutte le lingue abilitate.</string>
 	<string name="pref_show_suggestions_abc_summary">Mostra le lettere possibili nella barra dei suggerimenti quando viene premuto un tasto.</string>
@@ -195,6 +196,7 @@
 	<string name="language_selection_language_loaded">(caricata)</string>
 	<string name="language_selection_title">Abilita lingue</string>
 	<string name="language_selection_words">parole</string>
+	<string name="pref_auto_trim_trailing_space_summary">Rimuovere automaticamente gli spazi extra quando il cursore viene spostato indietro.</string>
 	<string name="pref_backspace_acceleration">Cancellazione rapida</string>
 	<string name="pref_backspace_acceleration_summary">Cancellare intere parole tenendo premuto o scorrendo Backspace. (Non supportato in alcune app)</string>
 	<string name="pref_category_punctuation_order">Ordine di punteggiatura</string>
@@ -215,6 +217,7 @@
 	<string name="punctuation_order_forbidden_char">Carattere vietato:%1$s</string>
 	<string name="punctuation_order_forbidden_chars">Caratteri vietati:%1$s</string>
 	<string name="function_edit_text">Strumenti degli appunti</string>
+	<string name="function_edit_word">Modifica parola</string>
 	<string name="function_filter_suggestions">Filtrare suggerimenti</string>
 	<string name="function_filter_suggestions_not_available">Il filtraggio non è possibile in questa lingua.</string>
 	<string name="pref_category_geometry">Geometria</string>
@@ -266,5 +269,8 @@
 	<string name="tutorial_classic_add_word">Scorri verso sinistra per aggiungere una parola.</string>
 	<string name="pref_hack_auto_disable_composing">Disattivare automaticamente la composizione del testo</string>
 	<string name="pref_show_suggestions_abc">Mostra suggerimenti di lettere</string>
+	<string name="pref_auto_trim_trailing_space">Rimuovere automaticamente gli spazi finali</string>
+	<string name="edit_word_invalid_characters">Impossibile modificare \"%1$s\" quando la lingua è \"%2$s\".</string>
+	<string name="edit_word_not_available_in_language">La modifica delle parole non è possibile in questa lingua.</string>
 </resources>
 

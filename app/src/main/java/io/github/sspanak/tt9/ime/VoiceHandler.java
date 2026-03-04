@@ -80,7 +80,6 @@ abstract class VoiceHandler extends TypingHandler {
 		statusBar.setText(R.string.loading);
 		suggestionOps.cancelDelayedAccept();
 		mInputMode.onAcceptSuggestion(suggestionOps.acceptIncomplete());
-		textField.finishComposingText(); // Commit any underlined text before starting new voice input
 		autoTextCase = new AutoTextCase(settings, new Sequences(), inputType);
 		beforeSpeech = textField.getStringBeforeCursor();
 		voiceInputOps.listen(mLanguage);
@@ -91,15 +90,6 @@ abstract class VoiceHandler extends TypingHandler {
 		if (voiceInputOps.isListening()) {
 			statusBar.setText(R.string.voice_input_stopping);
 			voiceInputOps.stop();
-		}
-	}
-
-
-	@Override
-	public void onDestroy() {
-		super.onDestroy();
-		if (voiceInputOps != null) {
-			voiceInputOps.destroy();
 		}
 	}
 
@@ -136,7 +126,10 @@ abstract class VoiceHandler extends TypingHandler {
 
 
 	private void onVoiceInputError(VoiceInputError error) {
-		if (error.isLanguageMissing() && voiceInputOps.enableOfflineMode(mLanguage, false)) {
+		if (error.isStartTimeout()) {
+			Logger.i(LOG_TAG, "Google SpeechRecognizer timed out. Enforcing alternative listening mode for the current session.");
+			voiceInputOps.forceAlternativeInput(true).listen(mLanguage);
+		} else if (error.isLanguageMissing() && voiceInputOps.enableOfflineMode(mLanguage, false)) {
 			Logger.i(LOG_TAG, "Voice input package for language '" + mLanguage.getName() + "' is missing. Enforcing online mode for the current session.");
 			voiceInputOps.listen(mLanguage);
 		} else if (error.isIrrelevantToUser()) {

@@ -63,20 +63,8 @@ class Wrapper {
 
 
 	static def sha256(String filePath) {
-		try {
-			def digest = java.security.MessageDigest.getInstance("SHA-256")
-			def file = new File(filePath)
-			file.withInputStream { is ->
-				byte[] buffer = new byte[8192]
-				int read
-				while ((read = is.read(buffer)) != -1) {
-					digest.update(buffer, 0, read)
-				}
-			}
-			return digest.digest().encodeHex().toString()
-		} catch (Exception e) {
-			return ""
-		}
+		def parts = "sha256sum $filePath".execute().text.trim().split(" ")
+		return parts.length > 0 ? parts[0] : ""
 	}
 }
 
