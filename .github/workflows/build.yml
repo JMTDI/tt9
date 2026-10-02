@@ -1,0 +1,268 @@
+name: Build tt9 + FUTO
+
+# Watches sspanak/tt9 for new release tags, applies the FUTO/Whisper patch,
+# builds, lets Puter AI fix patch conflicts / build errors, then publishes a
+# signed APK as a GitHub release.
+#
+# Secrets (Settings > Secrets and variables > Actions):
+#   PUTER_AUTH_TOKEN   Puter auth token (puter.com/dashboard, Auth Token)
+#   KEYSTORE_BASE64    base64 of your .jks keystore   (base64 -w0 release.jks)
+#   KEYSTORE_PASSWORD  keystore password
+#   KEY_ALIAS          key alias inside the keystore
+#   KEY_PASSWORD       key password
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Upstream tag to build, e.g. v64.0 (blank = latest)"
+        required: false
+        default: ""
+      force:
+        description: "Rebuild and replace the release even if it already exists"
+        type: boolean
+        default: false
+      max_attempts:
+        description: "Max build attempts (each failed one is followed by an AI fix)"
+        required: false
+        default: "5"
+
+concurrency:
+  group: tt9-futo-build
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+
+env:
+  UPSTREAM_REPO: sspanak/tt9
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: Check out this repo (patch + scripts)
+        uses: actions/checkout@v5
+        with:
+          path: ci
+          persist-credentials: false
+
+      - name: Find upstream version
+        id: ver
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_REF: ${{ github.event.inputs.ref }}
+          FORCE: ${{ github.event.inputs.force }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_REF:-}" ]; then
+            TAG="$INPUT_REF"
+          else
+            TAG="$(git ls-remote --tags --refs "https://github.com/$UPSTREAM_REPO.git" 'v*' \
+                   | sed 's|.*refs/tags/||' | grep -E '^v[0-9]+(\.[0-9]+)*$' | sort -V | tail -n1)"
+          fi
+          [[ "$TAG" =~ ^v[0-9]+(\.[0-9]+)*$ ]] || { echo "::error::Not a release tag: '$TAG'"; exit 1; }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if gh release view "$TAG-futo" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && [ "${FORCE:-false}" != "true" ]; then
+            echo "$TAG-futo is already released; nothing to do."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # GitHub pauses scheduled workflows after 60 days without repo activity.
+      - name: Keep schedule alive
+        if: steps.ver.outputs.build == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd ci
+          age=$(( ( $(date +%s) - $(git log -1 --format=%ct) ) / 86400 ))
+          if [ "$age" -ge 45 ]; then
+            git config user.name tt9-futo-bot
+            git config user.email tt9-futo-bot@users.noreply.github.com
+            git commit --allow-empty -q -m "chore: keep scheduled workflow active"
+            git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:"${GITHUB_REF_NAME}"
+          fi
+
+      - name: Check required secrets
+        if: steps.ver.outputs.build == 'true'
+        env:
+          S1: ${{ secrets.PUTER_AUTH_TOKEN }}
+          S2: ${{ secrets.KEYSTORE_BASE64 }}
+          S3: ${{ secrets.KEYSTORE_PASSWORD }}
+          S4: ${{ secrets.KEY_ALIAS }}
+          S5: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          missing=""
+          [ -n "$S1" ] || missing="$missing PUTER_AUTH_TOKEN"
+          [ -n "$S2" ] || missing="$missing KEYSTORE_BASE64"
+          [ -n "$S3" ] || missing="$missing KEYSTORE_PASSWORD"
+          [ -n "$S4" ] || missing="$missing KEY_ALIAS"
+          [ -n "$S5" ] || missing="$missing KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets:$missing"
+            exit 1
+          fi
+
+      - name: Clone upstream ${{ steps.ver.outputs.tag }}
+        if: steps.ver.outputs.build == 'true'
+        run: |
+          # Full history + tags on purpose: upstream computes versionName/versionCode from git.
+          git clone --quiet "https://github.com/$UPSTREAM_REPO.git" tt9
+          git -C tt9 checkout --quiet --detach "${{ steps.ver.outputs.tag }}"
+
+      - uses: actions/setup-java@v5
+        if: steps.ver.outputs.build == 'true'
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.ver.outputs.build == 'true'
+
+      - name: Apply FUTO patch
+        if: steps.ver.outputs.build == 'true'
+        run: bash ci/.github/scripts/apply_patch.sh "$PWD/tt9" "$PWD/ci"
+
+      - name: Build (AI fixes conflicts and build errors)
+        if: steps.ver.outputs.build == 'true'
+        working-directory: tt9
+        env:
+          PUTER_AUTH_TOKEN: ${{ secrets.PUTER_AUTH_TOKEN }}
+          MAX_ATTEMPTS: ${{ github.event.inputs.max_attempts || '5' }}
+          OUT_DIR: ${{ github.workspace }}/out
+        run: bash ../ci/.github/scripts/build_loop.sh "${{ steps.ver.outputs.tag }}"
+
+      - name: Sign APKs
+        if: steps.ver.outputs.build == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.ver.outputs.tag }}"
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n1)"
+          KS="$RUNNER_TEMP/release.jks"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$KS"
+          mkdir -p dist
+          mapfile -t apks < <(find tt9/app/build/outputs/apk -path '*/release/*.apk' | sort)
+          [ ${#apks[@]} -gt 0 ] || { echo "::error::No release APKs found"; exit 1; }
+          for apk in "${apks[@]}"; do
+            flavor="$(basename "$(dirname "$(dirname "$apk")")")"
+            out="dist/tt9-futo-${TAG}-${flavor}.apk"
+            "$BT/zipalign" -f -p 4 "$apk" "$RUNNER_TEMP/aligned.apk"
+            "$BT/apksigner" sign --ks "$KS" --ks-key-alias "$KEY_ALIAS" \
+              --ks-pass env:KS_PASS --key-pass env:KEY_PASS --out "$out" "$RUNNER_TEMP/aligned.apk"
+            "$BT/apksigner" verify "$out"
+            echo "signed $out"
+          done
+          rm -f "$KS" "$RUNNER_TEMP/aligned.apk"
+          (cd dist && sha256sum *.apk > SHA256SUMS)
+
+      # Save the (possibly AI-resolved) patch so the next release starts from it.
+      - name: Update patch in repo
+        if: steps.ver.outputs.build == 'true'
+        id: patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.ver.outputs.tag }}"
+          git -C tt9 diff --full-index "$TAG" HEAD -- . \
+            ':(exclude)app/src/main/AndroidManifest.xml' \
+            ':(exclude)app/src/main/ml/tiny_en_acft_q8_0.bin.not.tflite' \
+            ':(exclude)app/src/main/res/raw/cert.der' > new.patch
+          cp new.patch "dist/futo-${TAG}.patch"
+          if ! cmp -s new.patch ci/patch/futo.patch; then
+            cp new.patch ci/patch/futo.patch
+            cd ci
+            git config user.name tt9-futo-bot
+            git config user.email tt9-futo-bot@users.noreply.github.com
+            git add patch/futo.patch
+            git commit -q -m "patch: refresh for upstream $TAG"
+            git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:"${GITHUB_REF_NAME}"
+          fi
+          echo "sha=$(git -C ci rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        if: steps.ver.outputs.build == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.ver.outputs.tag }}"
+          REL="$TAG-futo"
+          attempts="$(cat out/attempts.txt)"
+          upstream_body="$(gh api "repos/$UPSTREAM_REPO/releases/tags/$TAG" --jq '.body // ""' 2>/dev/null || true)"
+          {
+            echo "tt9 \`$TAG\` from [sspanak/tt9](https://github.com/$UPSTREAM_REPO/releases/tag/$TAG) with the FUTO/Whisper voice backend, built automatically."
+            echo
+            echo "### Build"
+            echo "- Build attempts: **$attempts** (1 means it built on the first try)"
+            if [ -s out/ai_edited.txt ]; then
+              echo "- Files edited by the Puter AI to resolve conflicts or fix build errors:"
+              sort -u out/ai_edited.txt | sed 's/^/  - `/; s/$/`/'
+              echo "- These edits were not reviewed by a human. A passing build does not prove that no upstream change was dropped; the exact patch used is attached as \`futo-$TAG.patch\`."
+            else
+              echo "- The patch applied and built without AI edits."
+            fi
+            echo
+            echo "### Checksums (SHA-256)"
+            echo '```'
+            cat dist/SHA256SUMS
+            echo '```'
+            if [ -n "$upstream_body" ]; then
+              echo
+              echo "### Upstream release notes for $TAG"
+              echo "$upstream_body"
+            fi
+          } > notes.md
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            gh release delete "$REL" --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
+          fi
+          gh release create "$REL" dist/*.apk dist/SHA256SUMS "dist/futo-${TAG}.patch" \
+            --repo "$GITHUB_REPOSITORY" --target "${{ steps.patch.outputs.sha }}" \
+            --title "tt9 $TAG + FUTO" --notes-file notes.md
+
+      - name: Upload logs on failure
+        if: failure() && steps.ver.outputs.build == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            out/*.log
+            out/ai_edited.txt
+          if-no-files-found: ignore
+
+      - name: Open issue on failure
+        if: failure() && steps.ver.outputs.build == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          TITLE="FUTO build failed for upstream $TAG"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$TITLE\" in:title" --json number --jq '.[0].number // empty')"
+          last="$(ls -t out/build*.log 2>/dev/null | head -n1 || true)"
+          {
+            echo "The automated build did not finish: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo
+            echo "Full logs are in the run's \`build-logs\` artifact."
+            if [ -n "$last" ]; then
+              echo
+              echo '```'
+              tail -n 60 "$last"
+              echo '```'
+            fi
+          } > issue.md
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body-file issue.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body-file issue.md
+          fi
