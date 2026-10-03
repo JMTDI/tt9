@@ -248,7 +248,15 @@ def fix_build(log_path, edited_out):
 
 
 def ping():
+    def src(name):
+        return "set" if os.environ.get(name) else "NOT SET -> default"
+    print(f"Settings received: PUTER_BASE_URL {src('PUTER_BASE_URL')}, PUTER_MODEL {src('PUTER_MODEL')}, "
+          f"PUTER_FALLBACK_MODELS {src('PUTER_FALLBACK_MODELS')}")
     print(f"Testing {BASE_URL}  token={'set' if TOKEN else 'MISSING'}")
+    if "api.puter.com" in BASE_URL and TOKEN.startswith("nvapi-"):
+        print("::error::The key looks like an NVIDIA key (nvapi-) but PUTER_BASE_URL is not set, "
+              "so it would be sent to Puter. Set PUTER_BASE_URL to https://integrate.api.nvidia.com/v1")
+        return 1
     tried = []
     for m in [MODEL] + [x for x in FALLBACK_MODELS if x != MODEL]:
         try:

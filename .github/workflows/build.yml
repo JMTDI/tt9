@@ -40,12 +40,12 @@ permissions:
 
 env:
   UPSTREAM_REPO: sspanak/tt9
-  # Optional repo variables (Settings > Secrets and variables > Actions > Variables).
-  # Empty means "use the script's default".
-  PUTER_BASE_URL: ${{ vars.PUTER_BASE_URL }}
-  PUTER_MODEL: ${{ vars.PUTER_MODEL }}
-  PUTER_MAX_TOKENS: ${{ vars.PUTER_MAX_TOKENS }}
-  PUTER_FALLBACK_MODELS: ${{ vars.PUTER_FALLBACK_MODELS }}
+  # Optional settings. Each can be a repo *variable* or a repo *secret* with the same name
+  # (Settings > Secrets and variables > Actions). Empty means "use the script's default".
+  PUTER_BASE_URL: ${{ vars.PUTER_BASE_URL || secrets.PUTER_BASE_URL }}
+  PUTER_MODEL: ${{ vars.PUTER_MODEL || secrets.PUTER_MODEL }}
+  PUTER_MAX_TOKENS: ${{ vars.PUTER_MAX_TOKENS || secrets.PUTER_MAX_TOKENS }}
+  PUTER_FALLBACK_MODELS: ${{ vars.PUTER_FALLBACK_MODELS || secrets.PUTER_FALLBACK_MODELS }}
 
 jobs:
   build:
