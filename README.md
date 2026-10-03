@@ -1,4 +1,4 @@
-# tt9-patch
+# tt9
 
 Builds [sspanak/tt9](https://github.com/sspanak/tt9) with the FUTO/Whisper voice backend
 (originally `JMTDI/tt9-futo@70c86cc`) and publishes signed APKs as releases.
