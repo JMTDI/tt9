@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Asks an AI model (Puter, OpenAI-compatible) to repair the patched tt9 tree.
+"""Asks an AI model (any OpenAI-compatible endpoint: Puter, NVIDIA, ...) to repair the patched tt9 tree.
 
   ai_fix.py conflicts                 resolve git conflict markers
   ai_fix.py build --log build.log     fix files named in compiler/Gradle errors
@@ -31,7 +31,7 @@ MODEL = os.environ.get("PUTER_MODEL") or "claude-sonnet-4-5"
 FALLBACK_MODELS = [m.strip() for m in (os.environ.get("PUTER_FALLBACK_MODELS")
                    or "qwen/qwen3.6-plus,x-ai/grok-4.3,gpt-4.1-nano").split(",") if m.strip()]
 MAX_TOKENS = int(os.environ.get("PUTER_MAX_TOKENS") or "32000")
-TOKEN = os.environ.get("PUTER_AUTH_TOKEN", "")
+TOKEN = os.environ.get("AI_API_KEY") or os.environ.get("PUTER_AUTH_TOKEN") or ""
 RETRIES = int(os.environ.get("PUTER_RETRIES") or "4")
 
 MAX_FILE_BYTES = 200_000
@@ -81,37 +81,57 @@ def editable(path):
 
 
 def chat(system, user, max_tokens=None, model=None, retries=None):
-    if not TOKEN:
-        raise RuntimeError("PUTER_AUTH_TOKEN is empty or not set (check the repo secret name)")
-    body = json.dumps({
-        "model": model or MODEL,
-        "max_tokens": max_tokens or MAX_TOKENS,
-        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-    }).encode()
-    req = urllib.request.Request(
-        BASE_URL.rstrip("/") + "/chat/completions", data=body,
-        headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"})
+    global MAX_TOKENS
+    key = TOKEN
+    if not key:
+        raise RuntimeError("API key is empty or not set (secret AI_API_KEY or PUTER_AUTH_TOKEN)")
+    mdl = model or MODEL
+    limit = max_tokens or MAX_TOKENS
     last = None
     n = retries or RETRIES
-    for i in range(n):
+    i = 0
+    while i < n:
+        body = json.dumps({
+            "model": mdl,
+            "max_tokens": limit,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+        }).encode()
+        req = urllib.request.Request(
+            BASE_URL.rstrip("/") + "/chat/completions", data=body,
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
         try:
             with urllib.request.urlopen(req, timeout=400) as r:
                 data = json.load(r)
-            return data["choices"][0]["message"]["content"]
+            content = data["choices"][0]["message"].get("content")
+            if not content:
+                raise KeyError("empty content (model may have spent all tokens on reasoning)")
+            return content
         except urllib.error.HTTPError as e:
-            last = f"HTTP {e.code} from {BASE_URL} (model {model or MODEL}): {e.read().decode('utf-8', 'replace')[:600]}"
+            text = e.read().decode("utf-8", "replace")
+            last = f"HTTP {e.code} from {BASE_URL} (model {mdl}): {text[:600]}"
+            if e.code == 400 and "max" in text.lower() and "token" in text.lower() and limit > 4096:
+                limit = max(4096, limit // 2)   # provider caps output length: retry lower, not counted as a retry
+                if not max_tokens:
+                    MAX_TOKENS = limit          # remember it for the following files
+                print(f"   output limit rejected; retrying with max_tokens={limit}")
+                continue
             if e.code not in (429, 500, 502, 503, 504):
                 break
         except (urllib.error.URLError, TimeoutError, KeyError, json.JSONDecodeError) as e:
             last = f"{type(e).__name__}: {e}"
-        if i < n - 1:
-            time.sleep(10 * 2 ** i)
-    raise RuntimeError(f"Puter request failed: {last}")
+        i += 1
+        if i < n:
+            time.sleep(10 * 2 ** (i - 1))
+    raise RuntimeError(f"AI request failed: {last}")
 
 
 def extract_file(reply):
-    m = re.search(r"```[^\n]*\n(.*)\n```\s*$", reply.strip(), re.S)
-    return (m.group(1) + "\n") if m else None
+    """Return the file from the reply: the longest fenced block, ignoring <think> sections."""
+    reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.S).strip()
+    blocks = re.findall(r"```[^\n]*\n(.*?)\n```", reply, re.S)
+    if not blocks:
+        return None
+    return max(blocks, key=len) + "\n"
 
 
 def has_markers(text):
@@ -244,7 +264,7 @@ def ping():
             continue
         print(f"  OK   {m}: replied {reply.strip()[:40]!r}")
         if m != MODEL:
-            print(f"::warning::{MODEL} is not available to this account; using {m} instead. "
+            print(f"::warning::{MODEL} was refused for this account; using {m} instead. "
                   "Smaller models resolve merge conflicts less reliably.")
             gh_env = os.environ.get("GITHUB_ENV")
             if gh_env:
@@ -252,7 +272,7 @@ def ping():
                     f.write(f"PUTER_MODEL={m}\n")
         return 0
     print("::error::No model worked for this account: " + ", ".join(tried) +
-          ". An HTTP 402 means the plan does not include API access.")
+          ". HTTP 402 means the plan has no API access; 404 usually means a wrong model id.")
     return 1
 
 

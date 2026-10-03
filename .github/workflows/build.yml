@@ -5,7 +5,8 @@ name: Build tt9 + FUTO
 # signed APK as a GitHub release.
 #
 # Secrets (Settings > Secrets and variables > Actions):
-#   PUTER_AUTH_TOKEN   Puter auth token (puter.com/dashboard, Auth Token)
+#   AI_API_KEY         API key for the AI provider (NVIDIA nvapi-..., Puter token, etc.)
+#                      (PUTER_AUTH_TOKEN is still accepted as an alias)
 #   KEYSTORE_BASE64    base64 of your .jks keystore   (base64 -w0 release.jks)
 #   KEYSTORE_PASSWORD  keystore password
 #   KEY_ALIAS          key alias inside the keystore
@@ -43,6 +44,10 @@ env:
   # Empty means "use the script's default".
   PUTER_BASE_URL: ${{ vars.PUTER_BASE_URL }}
   PUTER_MODEL: ${{ vars.PUTER_MODEL }}
+  PUTER_MAX_TOKENS: ${{ vars.PUTER_MAX_TOKENS }}
+  PUTER_FALLBACK_MODELS: ${{ vars.PUTER_FALLBACK_MODELS }}
+  PUTER_FALLBACK_MODELS: ${{ vars.PUTER_FALLBACK_MODELS }}
+  PUTER_MAX_TOKENS: ${{ vars.PUTER_MAX_TOKENS }}
 
 jobs:
   build:
@@ -96,14 +101,14 @@ jobs:
       - name: Check required secrets
         if: steps.ver.outputs.build == 'true'
         env:
-          S1: ${{ secrets.PUTER_AUTH_TOKEN }}
+          S1: ${{ secrets.AI_API_KEY || secrets.PUTER_AUTH_TOKEN }}
           S2: ${{ secrets.KEYSTORE_BASE64 }}
           S3: ${{ secrets.KEYSTORE_PASSWORD }}
           S4: ${{ secrets.KEY_ALIAS }}
           S5: ${{ secrets.KEY_PASSWORD }}
         run: |
           missing=""
-          [ -n "$S1" ] || missing="$missing PUTER_AUTH_TOKEN"
+          [ -n "$S1" ] || missing="$missing AI_API_KEY"
           [ -n "$S2" ] || missing="$missing KEYSTORE_BASE64"
           [ -n "$S3" ] || missing="$missing KEYSTORE_PASSWORD"
           [ -n "$S4" ] || missing="$missing KEY_ALIAS"
@@ -116,7 +121,7 @@ jobs:
       - name: Test Puter connection
         if: steps.ver.outputs.build == 'true'
         env:
-          PUTER_AUTH_TOKEN: ${{ secrets.PUTER_AUTH_TOKEN }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY || secrets.PUTER_AUTH_TOKEN }}
         run: python3 ci/.github/scripts/ai_fix.py ping
 
       - name: Clone upstream ${{ steps.ver.outputs.tag }}
@@ -147,7 +152,7 @@ jobs:
         if: steps.ver.outputs.build == 'true'
         working-directory: tt9
         env:
-          PUTER_AUTH_TOKEN: ${{ secrets.PUTER_AUTH_TOKEN }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY || secrets.PUTER_AUTH_TOKEN }}
           MAX_ATTEMPTS: ${{ github.event.inputs.max_attempts || '5' }}
           OUT_DIR: ${{ github.workspace }}/out
         run: bash ../ci/.github/scripts/build_loop.sh "${{ steps.ver.outputs.tag }}"
