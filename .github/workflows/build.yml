@@ -256,6 +256,7 @@ jobs:
           name: build-logs
           path: |
             out/*.log
+            out/*.diff
             out/ai_edited.txt
           if-no-files-found: ignore
 

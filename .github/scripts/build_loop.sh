@@ -11,7 +11,7 @@ TAG="$1"
 MAX="${MAX_ATTEMPTS:-5}"
 OUT="${OUT_DIR:-$PWD/..}"
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
-BUILD_CMD="${BUILD_CMD:-./gradlew generateDocs validateLanguages buildDefinition buildDictionaryDownloads copyDownloadsToAssets assembleLiteRelease assembleFullRelease --no-daemon --stacktrace}"
+BUILD_CMD="${BUILD_CMD:-./gradlew generateDocs validateLanguages buildDefinition buildDictionaryDownloads copyDownloadsToAssets assembleLiteRelease assembleFullRelease --no-daemon --console=plain}"
 EDITED="$OUT/ai_edited.txt"
 LOG="$OUT/build.log"
 mkdir -p "$OUT"
@@ -21,7 +21,22 @@ mkdir -p "$OUT"
 git config user.name  "tt9-futo-bot"
 git config user.email "tt9-futo-bot@users.noreply.github.com"
 
-fail() { echo "::error::$*"; echo "failed" > "$OUT/result.txt"; exit 1; }
+fail() {
+  echo "::error::$*"
+  echo "failed" > "$OUT/result.txt"
+  git diff "$TAG" HEAD > "$OUT/patched-vs-upstream.diff" 2>/dev/null || true
+  if [ -s "$EDITED" ]; then echo "Files edited by the AI so far:"; sort -u "$EDITED" | sed 's/^/  /'; fi
+  exit 1
+}
+
+# Print the part of a Gradle log that explains the failure, outside the collapsed group.
+summarize_failure() {
+  echo "================ BUILD FAILURE SUMMARY ($1) ================"
+  grep -n -m1 -A14 "What went wrong" "$1" | cut -c1-300
+  echo "---- first error lines ----"
+  grep -nE "error:|error LNK|undefined reference|cannot find symbol|FAILED$|Execution failed" "$1" | head -25 | cut -c1-300
+  echo "=========================================================="
+}
 
 # Run an ai_fix.py mode and keep its output in a log.
 run_ai() {
@@ -75,6 +90,7 @@ while :; do
     exit 0
   fi
   cp "$LOG" "$OUT/build-attempt-$attempt.log"
+  summarize_failure "$LOG"
   [ "$attempt" -ge "$MAX" ] && fail "build still failing after $MAX attempts"
 
   before=$(wc -l < "$EDITED")

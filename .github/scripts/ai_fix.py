@@ -254,13 +254,20 @@ def fix_conflicts(edited_out):
     return 0
 
 
+ERROR_WORD = re.compile(r"\berror\b|\bFAILED\b|cannot find symbol|undefined reference|Execution failed", re.I)
+WARNING_ONLY = re.compile(r"\bwarning\b|\bnote:", re.I)
+
+
 def collect_errors(log):
-    """Map repo-relative file -> list of log excerpts that mention it."""
+    """Map repo-relative file -> excerpts of REAL errors that mention it (warnings are ignored)."""
     lines = log.split("\n")
     per_file = {}
     for i, line in enumerate(lines):
-        for pat in PATH_PATTERNS:
+        for n, pat in enumerate(PATH_PATTERNS):
             for m in pat.finditer(line):
+                # Gradle "Build file ... line: N" is followed by the message; others must say "error" themselves.
+                if n != 1 and (not ERROR_WORD.search(line) or WARNING_ONLY.search(line)):
+                    continue
                 path = rel(m.group(1))
                 if editable(path):
                     chunk = "\n".join(lines[i:i + 4])
