@@ -39,6 +39,10 @@ permissions:
 
 env:
   UPSTREAM_REPO: sspanak/tt9
+  # Optional repo variables (Settings > Secrets and variables > Actions > Variables).
+  # Empty means "use the script's default".
+  PUTER_BASE_URL: ${{ vars.PUTER_BASE_URL }}
+  PUTER_MODEL: ${{ vars.PUTER_MODEL }}
 
 jobs:
   build:
@@ -113,7 +117,6 @@ jobs:
         if: steps.ver.outputs.build == 'true'
         env:
           PUTER_AUTH_TOKEN: ${{ secrets.PUTER_AUTH_TOKEN }}
-          PUTER_RETRIES: "2"
         run: python3 ci/.github/scripts/ai_fix.py ping
 
       - name: Clone upstream ${{ steps.ver.outputs.tag }}

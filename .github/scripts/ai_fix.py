@@ -25,11 +25,14 @@ import time
 import urllib.error
 import urllib.request
 
-BASE_URL = os.environ.get("PUTER_BASE_URL", "https://api.puter.com/puterai/openai/v1/")
-MODEL = os.environ.get("PUTER_MODEL", "claude-sonnet-4-5")
-MAX_TOKENS = int(os.environ.get("PUTER_MAX_TOKENS", "32000"))
+BASE_URL = os.environ.get("PUTER_BASE_URL") or "https://api.puter.com/puterai/openai/v1/"
+MODEL = os.environ.get("PUTER_MODEL") or "claude-sonnet-4-5"
+# Tried by `ping` when MODEL is refused. Names taken from Puter's own tutorials.
+FALLBACK_MODELS = [m.strip() for m in (os.environ.get("PUTER_FALLBACK_MODELS")
+                   or "qwen/qwen3.6-plus,x-ai/grok-4.3,gpt-4.1-nano").split(",") if m.strip()]
+MAX_TOKENS = int(os.environ.get("PUTER_MAX_TOKENS") or "32000")
 TOKEN = os.environ.get("PUTER_AUTH_TOKEN", "")
-RETRIES = int(os.environ.get("PUTER_RETRIES", "4"))
+RETRIES = int(os.environ.get("PUTER_RETRIES") or "4")
 
 MAX_FILE_BYTES = 200_000
 MAX_FILES_PER_ATTEMPT = 4
@@ -77,11 +80,11 @@ def editable(path):
     return os.path.isfile(path) and os.path.getsize(path) <= MAX_FILE_BYTES
 
 
-def chat(system, user, max_tokens=None):
+def chat(system, user, max_tokens=None, model=None, retries=None):
     if not TOKEN:
         raise RuntimeError("PUTER_AUTH_TOKEN is empty or not set (check the repo secret name)")
     body = json.dumps({
-        "model": MODEL,
+        "model": model or MODEL,
         "max_tokens": max_tokens or MAX_TOKENS,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
     }).encode()
@@ -89,18 +92,19 @@ def chat(system, user, max_tokens=None):
         BASE_URL.rstrip("/") + "/chat/completions", data=body,
         headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"})
     last = None
-    for i in range(RETRIES):
+    n = retries or RETRIES
+    for i in range(n):
         try:
             with urllib.request.urlopen(req, timeout=400) as r:
                 data = json.load(r)
             return data["choices"][0]["message"]["content"]
         except urllib.error.HTTPError as e:
-            last = f"HTTP {e.code} from {BASE_URL} (model {MODEL}): {e.read().decode('utf-8', 'replace')[:600]}"
+            last = f"HTTP {e.code} from {BASE_URL} (model {model or MODEL}): {e.read().decode('utf-8', 'replace')[:600]}"
             if e.code not in (429, 500, 502, 503, 504):
                 break
         except (urllib.error.URLError, TimeoutError, KeyError, json.JSONDecodeError) as e:
             last = f"{type(e).__name__}: {e}"
-        if i < RETRIES - 1:
+        if i < n - 1:
             time.sleep(10 * 2 ** i)
     raise RuntimeError(f"Puter request failed: {last}")
 
@@ -224,10 +228,32 @@ def fix_build(log_path, edited_out):
 
 
 def ping():
-    print(f"Testing Puter: {BASE_URL} model={MODEL} token={'set' if TOKEN else 'MISSING'}")
-    reply = chat("You are a connectivity test.", "Reply with the single word OK.", max_tokens=20)
-    print(f"Puter replied: {reply.strip()[:80]!r}")
-    return 0
+    print(f"Testing {BASE_URL}  token={'set' if TOKEN else 'MISSING'}")
+    tried = []
+    for m in [MODEL] + [x for x in FALLBACK_MODELS if x != MODEL]:
+        try:
+            reply = chat("You are a connectivity test.", "Reply with the single word OK.",
+                         max_tokens=20, model=m, retries=1)
+        except RuntimeError as e:
+            msg = str(e)
+            print(f"  FAIL {m}: {msg[:260]}")
+            tried.append(m)
+            if "HTTP 401" in msg or "HTTP 403" in msg or "empty or not set" in msg:
+                print("::error::The token was rejected; trying other models will not help.")
+                return 1
+            continue
+        print(f"  OK   {m}: replied {reply.strip()[:40]!r}")
+        if m != MODEL:
+            print(f"::warning::{MODEL} is not available to this account; using {m} instead. "
+                  "Smaller models resolve merge conflicts less reliably.")
+            gh_env = os.environ.get("GITHUB_ENV")
+            if gh_env:
+                with open(gh_env, "a") as f:
+                    f.write(f"PUTER_MODEL={m}\n")
+        return 0
+    print("::error::No model worked for this account: " + ", ".join(tried) +
+          ". An HTTP 402 means the plan does not include API access.")
+    return 1
 
 
 def main():
