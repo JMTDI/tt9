@@ -148,6 +148,7 @@ jobs:
 
       - name: Build (AI fixes conflicts and build errors)
         if: steps.ver.outputs.build == 'true'
+        timeout-minutes: 150
         working-directory: tt9
         env:
           AI_API_KEY: ${{ secrets.AI_API_KEY || secrets.PUTER_AUTH_TOKEN }}

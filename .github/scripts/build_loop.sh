@@ -4,7 +4,7 @@
 # Run from inside the patched upstream checkout.
 #   Usage: build_loop.sh <upstream-tag>
 #   Env:   MAX_ATTEMPTS (default 5), OUT_DIR (logs + results), BUILD_CMD,
-#          PUTER_AUTH_TOKEN (used only by ai_fix.py, removed from the build env)
+#          AI_API_KEY / PUTER_AUTH_TOKEN (used only by ai_fix.py, removed from the build env)
 set -uo pipefail
 
 TAG="$1"
@@ -26,7 +26,7 @@ fail() { echo "::error::$*"; echo "failed" > "$OUT/result.txt"; exit 1; }
 # Run an ai_fix.py mode and keep its output in a log.
 run_ai() {
   local name="$1"; shift
-  python3 "$SCRIPTS/ai_fix.py" "$@" --edited-out "$EDITED" 2>&1 | tee "$OUT/ai-$name.log"
+  python3 -u "$SCRIPTS/ai_fix.py" "$@" --edited-out "$EDITED" 2>&1 | tee "$OUT/ai-$name.log"
   return "${PIPESTATUS[0]}"
 }
 # Re-print the AI log tail outside the collapsed group so the reason is visible.
@@ -64,7 +64,7 @@ transient=0
 while :; do
   echo "::group::Build attempt $attempt of $MAX"
   # The build runs upstream Gradle scripts: never give them the Puter token.
-  env -u PUTER_AUTH_TOKEN bash -c "$BUILD_CMD" 2>&1 | tee "$LOG"
+  env -u PUTER_AUTH_TOKEN -u AI_API_KEY bash -c "$BUILD_CMD" 2>&1 | tee "$LOG"
   rc=${PIPESTATUS[0]}
   echo "::endgroup::"
 

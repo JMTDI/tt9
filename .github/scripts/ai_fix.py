@@ -16,6 +16,7 @@ Safety: the model only ever returns file contents. Nothing it says is executed.
 It cannot touch .github/, the Gradle wrapper, or binary files.
 """
 import argparse
+import http.client
 import json
 import os
 import re
@@ -32,7 +33,16 @@ FALLBACK_MODELS = [m.strip() for m in (os.environ.get("PUTER_FALLBACK_MODELS")
                    or "qwen/qwen3.6-plus,x-ai/grok-4.3,gpt-4.1-nano").split(",") if m.strip()]
 MAX_TOKENS = int(os.environ.get("PUTER_MAX_TOKENS") or "32000")
 TOKEN = os.environ.get("AI_API_KEY") or os.environ.get("PUTER_AUTH_TOKEN") or ""
-RETRIES = int(os.environ.get("PUTER_RETRIES") or "4")
+RETRIES = int(os.environ.get("PUTER_RETRIES") or "3")
+STREAM = (os.environ.get("PUTER_STREAM") or "1") != "0"
+REQUEST_TIMEOUT = int(os.environ.get("PUTER_REQUEST_TIMEOUT") or "480")   # max seconds for one reply
+IDLE_TIMEOUT = int(os.environ.get("PUTER_IDLE_TIMEOUT") or "120")         # max seconds of total silence
+TOTAL_BUDGET = int(os.environ.get("PUTER_TOTAL_BUDGET") or "2400")        # max seconds for the whole script
+START = time.time()
+try:
+    sys.stdout.reconfigure(line_buffering=True)   # show progress live even when piped through tee
+except AttributeError:
+    pass
 
 MAX_FILE_BYTES = 200_000
 MAX_FILES_PER_ATTEMPT = 4
@@ -80,6 +90,38 @@ def editable(path):
     return os.path.isfile(path) and os.path.getsize(path) <= MAX_FILE_BYTES
 
 
+def read_stream(resp, deadline, label):
+    """Collect the text of an SSE chat-completion stream, printing progress every 20 s."""
+    parts, chars, thinking = [], 0, 0
+    began = last = time.time()
+    for raw in resp:                      # blocks at most IDLE_TIMEOUT between bytes
+        now = time.time()
+        if now > deadline:
+            raise TimeoutError(f"no complete reply within {REQUEST_TIMEOUT}s")
+        line = raw.decode("utf-8", "replace").strip()
+        if line.startswith("data:"):
+            payload = line[5:].strip()
+            if payload == "[DONE]":
+                break
+            try:
+                obj = json.loads(payload)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(obj, dict) and obj.get("error"):
+                raise RuntimeError(f"stream error: {str(obj['error'])[:300]}")
+            delta = ((obj.get("choices") or [{}])[0].get("delta")) or {}
+            if delta.get("content"):
+                parts.append(delta["content"])
+                chars += len(delta["content"])
+            if delta.get("reasoning_content") or delta.get("reasoning"):
+                thinking += 1
+        if now - last >= 20:
+            print(f"   ... {label}: {int(now - began)}s elapsed, {chars} chars written, "
+                  f"{thinking} thinking chunks", flush=True)
+            last = now
+    return "".join(parts)
+
+
 def chat(system, user, max_tokens=None, model=None, retries=None, allow_empty=False):
     global MAX_TOKENS
     key = TOKEN
@@ -94,15 +136,20 @@ def chat(system, user, max_tokens=None, model=None, retries=None, allow_empty=Fa
         body = json.dumps({
             "model": mdl,
             "max_tokens": limit,
+            "stream": STREAM,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         }).encode()
         req = urllib.request.Request(
             BASE_URL.rstrip("/") + "/chat/completions", data=body,
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
         try:
-            with urllib.request.urlopen(req, timeout=400) as r:
-                data = json.load(r)
-            content = data["choices"][0]["message"].get("content")
+            if time.time() - START > TOTAL_BUDGET:
+                raise RuntimeError(f"AI time budget of {TOTAL_BUDGET}s used up")
+            with urllib.request.urlopen(req, timeout=IDLE_TIMEOUT) as r:
+                if STREAM:
+                    content = read_stream(r, time.time() + REQUEST_TIMEOUT, mdl)
+                else:
+                    content = json.load(r)["choices"][0]["message"].get("content")
             if not content:
                 if allow_empty:
                     return ""
@@ -119,7 +166,8 @@ def chat(system, user, max_tokens=None, model=None, retries=None, allow_empty=Fa
                 continue
             if e.code not in (429, 500, 502, 503, 504):
                 break
-        except (urllib.error.URLError, TimeoutError, KeyError, json.JSONDecodeError) as e:
+        except (urllib.error.URLError, TimeoutError, KeyError, json.JSONDecodeError,
+                http.client.HTTPException, OSError) as e:
             last = f"{type(e).__name__}: {e}"
         i += 1
         if i < n:
