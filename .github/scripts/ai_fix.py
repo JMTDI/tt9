@@ -29,6 +29,7 @@ BASE_URL = os.environ.get("PUTER_BASE_URL", "https://api.puter.com/puterai/opena
 MODEL = os.environ.get("PUTER_MODEL", "claude-sonnet-4-5")
 MAX_TOKENS = int(os.environ.get("PUTER_MAX_TOKENS", "32000"))
 TOKEN = os.environ.get("PUTER_AUTH_TOKEN", "")
+RETRIES = int(os.environ.get("PUTER_RETRIES", "4"))
 
 MAX_FILE_BYTES = 200_000
 MAX_FILES_PER_ATTEMPT = 4
@@ -76,30 +77,31 @@ def editable(path):
     return os.path.isfile(path) and os.path.getsize(path) <= MAX_FILE_BYTES
 
 
-def chat(system, user):
+def chat(system, user, max_tokens=None):
     if not TOKEN:
-        sys.exit("PUTER_AUTH_TOKEN is not set")
+        raise RuntimeError("PUTER_AUTH_TOKEN is empty or not set (check the repo secret name)")
     body = json.dumps({
         "model": MODEL,
-        "max_tokens": MAX_TOKENS,
+        "max_tokens": max_tokens or MAX_TOKENS,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
     }).encode()
     req = urllib.request.Request(
         BASE_URL.rstrip("/") + "/chat/completions", data=body,
         headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"})
     last = None
-    for i in range(4):
+    for i in range(RETRIES):
         try:
             with urllib.request.urlopen(req, timeout=400) as r:
                 data = json.load(r)
             return data["choices"][0]["message"]["content"]
         except urllib.error.HTTPError as e:
-            last = f"HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:300]}"
+            last = f"HTTP {e.code} from {BASE_URL} (model {MODEL}): {e.read().decode('utf-8', 'replace')[:600]}"
             if e.code not in (429, 500, 502, 503, 504):
                 break
         except (urllib.error.URLError, TimeoutError, KeyError, json.JSONDecodeError) as e:
             last = f"{type(e).__name__}: {e}"
-        time.sleep(10 * 2 ** i)
+        if i < RETRIES - 1:
+            time.sleep(10 * 2 ** i)
     raise RuntimeError(f"Puter request failed: {last}")
 
 
@@ -221,16 +223,24 @@ def fix_build(log_path, edited_out):
     return 0 if changed else 1
 
 
+def ping():
+    print(f"Testing Puter: {BASE_URL} model={MODEL} token={'set' if TOKEN else 'MISSING'}")
+    reply = chat("You are a connectivity test.", "Reply with the single word OK.", max_tokens=20)
+    print(f"Puter replied: {reply.strip()[:80]!r}")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["conflicts", "build"])
+    ap.add_argument("mode", choices=["conflicts", "build", "ping"])
     ap.add_argument("--log", default="build.log")
     ap.add_argument("--edited-out", default="/tmp/ai_edited.txt")
     a = ap.parse_args()
     try:
-        code = fix_conflicts(a.edited_out) if a.mode == "conflicts" else fix_build(a.log, a.edited_out)
+        code = (ping() if a.mode == "ping" else fix_conflicts(a.edited_out) if a.mode == "conflicts"
+                else fix_build(a.log, a.edited_out))
     except RuntimeError as e:
-        print(f"ERROR: {e}")
+        print(f"::error::{e}")
         code = 1
     sys.exit(code)
 

@@ -23,10 +23,23 @@ git config user.email "tt9-futo-bot@users.noreply.github.com"
 
 fail() { echo "::error::$*"; echo "failed" > "$OUT/result.txt"; exit 1; }
 
+# Run an ai_fix.py mode and keep its output in a log.
+run_ai() {
+  local name="$1"; shift
+  python3 "$SCRIPTS/ai_fix.py" "$@" --edited-out "$EDITED" 2>&1 | tee "$OUT/ai-$name.log"
+  return "${PIPESTATUS[0]}"
+}
+# Re-print the AI log tail outside the collapsed group so the reason is visible.
+show_ai_tail() {
+  echo "---- AI step output (last 25 lines) ----"
+  tail -n 25 "$OUT/ai-$1.log" 2>/dev/null || true
+  echo "----------------------------------------"
+}
+
 # 1. Merge conflicts from upstream drift.
 if [ -n "$(git diff --name-only --diff-filter=U)" ]; then
   echo "::group::AI: resolving patch conflicts"
-  python3 "$SCRIPTS/ai_fix.py" conflicts --edited-out "$EDITED" || { echo "::endgroup::"; fail "AI could not resolve the patch conflicts"; }
+  run_ai conflicts conflicts || { echo "::endgroup::"; show_ai_tail conflicts; fail "AI could not resolve the patch conflicts (reason printed above)"; }
   echo "::endgroup::"
 fi
 # Commit before building: upstream derives versionCode from the commit count.
@@ -66,7 +79,7 @@ while :; do
 
   before=$(wc -l < "$EDITED")
   echo "::group::AI: fixing build errors (attempt $attempt)"
-  python3 "$SCRIPTS/ai_fix.py" build --log "$LOG" --edited-out "$EDITED"
+  run_ai "build-$attempt" build --log "$LOG"
   fixrc=$?
   echo "::endgroup::"
 
@@ -83,7 +96,7 @@ while :; do
       echo "Transient error; retrying the same tree in 30s ($transient/3)"
       sleep 30
       ;;
-    2) fail "build failed, but the errors don't point at any file the AI may edit" ;;
-    *) fail "AI step failed (see log above)" ;;
+    2) show_ai_tail "build-$attempt"; fail "build failed, but the errors don't point at any file the AI may edit" ;;
+    *) show_ai_tail "build-$attempt"; fail "AI step failed (reason printed above)" ;;
   esac
 done

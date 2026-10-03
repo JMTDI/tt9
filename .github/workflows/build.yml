@@ -109,6 +109,13 @@ jobs:
             exit 1
           fi
 
+      - name: Test Puter connection
+        if: steps.ver.outputs.build == 'true'
+        env:
+          PUTER_AUTH_TOKEN: ${{ secrets.PUTER_AUTH_TOKEN }}
+          PUTER_RETRIES: "2"
+        run: python3 ci/.github/scripts/ai_fix.py ping
+
       - name: Clone upstream ${{ steps.ver.outputs.tag }}
         if: steps.ver.outputs.build == 'true'
         run: |
