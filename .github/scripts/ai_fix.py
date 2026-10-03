@@ -80,7 +80,7 @@ def editable(path):
     return os.path.isfile(path) and os.path.getsize(path) <= MAX_FILE_BYTES
 
 
-def chat(system, user, max_tokens=None, model=None, retries=None):
+def chat(system, user, max_tokens=None, model=None, retries=None, allow_empty=False):
     global MAX_TOKENS
     key = TOKEN
     if not key:
@@ -104,6 +104,8 @@ def chat(system, user, max_tokens=None, model=None, retries=None):
                 data = json.load(r)
             content = data["choices"][0]["message"].get("content")
             if not content:
+                if allow_empty:
+                    return ""
                 raise KeyError("empty content (model may have spent all tokens on reasoning)")
             return content
         except urllib.error.HTTPError as e:
@@ -143,7 +145,9 @@ def ask_for_file(system, user, original, min_ratio, must_change):
     for attempt in range(2):
         reply = chat(system, user)
         out = extract_file(reply)
-        if out is None:
+        if not reply.strip():
+            why = "empty reply (a reasoning model may have spent its whole token budget thinking; raise PUTER_MAX_TOKENS)"
+        elif out is None:
             why = "reply did not contain a single fenced code block"
         elif has_markers(out):
             why = "output still contains conflict markers"
@@ -261,7 +265,7 @@ def ping():
     for m in [MODEL] + [x for x in FALLBACK_MODELS if x != MODEL]:
         try:
             reply = chat("You are a connectivity test.", "Reply with the single word OK.",
-                         max_tokens=20, model=m, retries=1)
+                         max_tokens=1024, model=m, retries=1, allow_empty=True)
         except RuntimeError as e:
             msg = str(e)
             print(f"  FAIL {m}: {msg[:260]}")
@@ -270,10 +274,11 @@ def ping():
                 print("::error::The token was rejected; trying other models will not help.")
                 return 1
             continue
-        print(f"  OK   {m}: replied {reply.strip()[:40]!r}")
+        print(f"  OK   {m}: " + (f"replied {reply.strip()[:40]!r}" if reply.strip()
+                                      else "reachable (empty text: it may be a reasoning model)"))
         if m != MODEL:
-            print(f"::warning::{MODEL} was refused for this account; using {m} instead. "
-                  "Smaller models resolve merge conflicts less reliably.")
+            print(f"::warning::{MODEL} did not work for this account/endpoint; using {m} instead. "
+                  "Check that this is the model you want.")
             gh_env = os.environ.get("GITHUB_ENV")
             if gh_env:
                 with open(gh_env, "a") as f:
