@@ -35,6 +35,13 @@ MAX_TOKENS = int(os.environ.get("PUTER_MAX_TOKENS") or "32000")
 TOKEN = os.environ.get("AI_API_KEY") or os.environ.get("PUTER_AUTH_TOKEN") or ""
 RETRIES = int(os.environ.get("PUTER_RETRIES") or "3")
 STREAM = (os.environ.get("PUTER_STREAM") or "1") != "0"
+try:
+    EXTRA_BODY = json.loads(os.environ.get("PUTER_EXTRA_BODY") or "{}")
+    if not isinstance(EXTRA_BODY, dict):
+        raise ValueError("must be a JSON object")
+except ValueError as _e:
+    print(f"::warning::PUTER_EXTRA_BODY ignored: {_e}")
+    EXTRA_BODY = {}
 REQUEST_TIMEOUT = int(os.environ.get("PUTER_REQUEST_TIMEOUT") or "480")   # max seconds for one reply
 IDLE_TIMEOUT = int(os.environ.get("PUTER_IDLE_TIMEOUT") or "120")         # max seconds of total silence
 TOTAL_BUDGET = int(os.environ.get("PUTER_TOTAL_BUDGET") or "2400")        # max seconds for the whole script
@@ -133,12 +140,14 @@ def chat(system, user, max_tokens=None, model=None, retries=None, allow_empty=Fa
     n = retries or RETRIES
     i = 0
     while i < n:
-        body = json.dumps({
+        payload = {
             "model": mdl,
             "max_tokens": limit,
             "stream": STREAM,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-        }).encode()
+        }
+        payload.update(EXTRA_BODY)
+        body = json.dumps(payload).encode()
         req = urllib.request.Request(
             BASE_URL.rstrip("/") + "/chat/completions", data=body,
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
@@ -270,7 +279,7 @@ def collect_errors(log):
                     continue
                 path = rel(m.group(1))
                 if editable(path):
-                    chunk = "\n".join(lines[i:i + 4])
+                    chunk = "\n".join(lines[i:i + 6])
                     per_file.setdefault(path, [])
                     if chunk not in per_file[path] and len(per_file[path]) < 25:
                         per_file[path].append(chunk)
@@ -291,12 +300,25 @@ def fix_build(log_path, edited_out):
         "with the smallest possible change. Typical causes: upstream renamed or changed a method, "
         "field, resource or Gradle API that the FUTO patch code still uses."))
     changed = 0
+    ref = os.environ.get("UPSTREAM_REF", "")
     for f, chunks in list(per_file.items())[:MAX_FILES_PER_ATTEMPT]:
         print(f"-> fixing {f} ({len(chunks)} error excerpt(s))")
         text = open(f, encoding="utf-8").read()
         errs = "\n---\n".join(chunks)
-        out = ask_for_file(system, f"File: {f}\n\nBuild errors mentioning this file:\n{errs}\n\n"
-                           f"Current file:\n```\n{text}```", text, 0.8, True)
+        reference = ""
+        if ref:
+            up = subprocess.run(["git", "show", f"{ref}:{f}"], capture_output=True, text=True)
+            if up.returncode == 0 and len(up.stdout) < 80_000:
+                reference = ("Upstream version of this file, read-only reference. Every member, import and API "
+                             "that exists upstream must still exist unless the FUTO patch intentionally replaces it. "
+                             "Classes that exist in the reference may have been renamed or removed upstream.\n"
+                             f"```\n{up.stdout}```\n\n")
+        try:
+            out = ask_for_file(system, f"File: {f}\n\nBuild errors mentioning this file:\n{errs}\n\n"
+                               f"{reference}Current file:\n```\n{text}```", text, 0.8, True)
+        except RuntimeError as e:        # one bad reply must not stop the other files
+            print(f"   skipped: {e}")
+            continue
         if out is None:
             continue
         open(f, "w", encoding="utf-8").write(out)

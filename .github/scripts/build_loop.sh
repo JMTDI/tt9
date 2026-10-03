@@ -8,6 +8,7 @@
 set -uo pipefail
 
 TAG="$1"
+export UPSTREAM_REF="$TAG"
 MAX="${MAX_ATTEMPTS:-5}"
 OUT="${OUT_DIR:-$PWD/..}"
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"

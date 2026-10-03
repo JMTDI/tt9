@@ -1,8 +1,8 @@
 diff --git a/app/build.gradle b/app/build.gradle
-index d11f3309..16fd65fa 100644
+index 595ea4bd6068168618dbdec0de9eba058a03f700..21074f863562f7ce2b35a36b2870a7c76a4f265c 100644
 --- a/app/build.gradle
 +++ b/app/build.gradle
-@@ -134,6 +134,15 @@ android {
+@@ -193,6 +193,15 @@ android {
  		targetCompatibility JavaVersion.VERSION_17
  	}
  
@@ -18,7 +18,7 @@ index d11f3309..16fd65fa 100644
  	flavorDimensions = ['app']
  	productFlavors {
  		full {
-@@ -153,6 +162,16 @@ android {
+@@ -212,6 +221,16 @@ android {
  		}
  	}
  
@@ -32,11 +32,11 @@ index d11f3309..16fd65fa 100644
 +		}
 +	}
 +
- 	applicationVariants.configureEach { variant ->
- 		def variantName = variant.name.capitalize()
- 		tasks.named("javaPreCompile${variantName}")?.configure {dependsOn(updateStatusIcons) }
+ 	androidComponents {
+ 		onVariants(selector().all()) { variant ->
+ 			def variantName = variant.name.capitalize()
 diff --git a/app/dictionary-tools.gradle b/app/dictionary-tools.gradle
-index 7ca4d45a..4fb4f71e 100644
+index 7ca4d45a5691744673911b378ddceb8e691215b0..4fb4f71eae995b9b88ab2d5ab307ca6c30a87a53 100644
 --- a/app/dictionary-tools.gradle
 +++ b/app/dictionary-tools.gradle
 @@ -63,8 +63,20 @@ class Wrapper {
@@ -64,7 +64,7 @@ index 7ca4d45a..4fb4f71e 100644
  
 diff --git a/app/src/main/cpp/CMakeLists.txt b/app/src/main/cpp/CMakeLists.txt
 new file mode 100644
-index 00000000..5c78fc50
+index 0000000000000000000000000000000000000000..5c78fc50fbe4ed06b16cdd2a8b13cc655aaa734e
 --- /dev/null
 +++ b/app/src/main/cpp/CMakeLists.txt
 @@ -0,0 +1,51 @@
@@ -121,7 +121,7 @@ index 00000000..5c78fc50
 +    log)
 diff --git a/app/src/main/cpp/defines.h b/app/src/main/cpp/defines.h
 new file mode 100644
-index 00000000..4f5dbf7e
+index 0000000000000000000000000000000000000000..4f5dbf7ece3ad3932c644a0dcb5572aff2847e68
 --- /dev/null
 +++ b/app/src/main/cpp/defines.h
 @@ -0,0 +1,96 @@
@@ -224,7 +224,7 @@ index 00000000..4f5dbf7e
 \ No newline at end of file
 diff --git a/app/src/main/cpp/ggml/ggml-alloc.c b/app/src/main/cpp/ggml/ggml-alloc.c
 new file mode 100644
-index 00000000..137eff18
+index 0000000000000000000000000000000000000000..137eff185480e39210a164bb54095a3b54ef2d0e
 --- /dev/null
 +++ b/app/src/main/cpp/ggml/ggml-alloc.c
 @@ -0,0 +1,767 @@
@@ -997,7 +997,7 @@ index 00000000..137eff18
 +}
 diff --git a/app/src/main/cpp/ggml/ggml-alloc.h b/app/src/main/cpp/ggml/ggml-alloc.h
 new file mode 100644
-index 00000000..d662f2e6
+index 0000000000000000000000000000000000000000..d662f2e6ee1b9407c6dca3d43513f32ccb2674be
 --- /dev/null
 +++ b/app/src/main/cpp/ggml/ggml-alloc.h
 @@ -0,0 +1,85 @@
@@ -1088,7 +1088,7 @@ index 00000000..d662f2e6
 +#endif
 diff --git a/app/src/main/cpp/ggml/ggml-backend-impl.h b/app/src/main/cpp/ggml/ggml-backend-impl.h
 new file mode 100644
-index 00000000..a63fe391
+index 0000000000000000000000000000000000000000..a63fe3919ebc296f134fd617eb1766a0d69782b6
 --- /dev/null
 +++ b/app/src/main/cpp/ggml/ggml-backend-impl.h
 @@ -0,0 +1,87 @@
@@ -1181,7 +1181,7 @@ index 00000000..a63fe391
 +#endif
 diff --git a/app/src/main/cpp/ggml/ggml-backend.c b/app/src/main/cpp/ggml/ggml-backend.c
 new file mode 100644
-index 00000000..e49ffce1
+index 0000000000000000000000000000000000000000..e49ffce1a4cae7eb029b7be9c35e54661695ee69
 --- /dev/null
 +++ b/app/src/main/cpp/ggml/ggml-backend.c
 @@ -0,0 +1,950 @@
@@ -2137,7 +2137,7 @@ index 00000000..e49ffce1
 +}
 diff --git a/app/src/main/cpp/ggml/ggml-backend.h b/app/src/main/cpp/ggml/ggml-backend.h
 new file mode 100644
-index 00000000..dd28a750
+index 0000000000000000000000000000000000000000..dd28a750a398785275dc7c416150afaea90faaec
 --- /dev/null
 +++ b/app/src/main/cpp/ggml/ggml-backend.h
 @@ -0,0 +1,136 @@
@@ -2279,7 +2279,7 @@ index 00000000..dd28a750
 +#endif
 diff --git a/app/src/main/cpp/ggml/ggml-impl.h b/app/src/main/cpp/ggml/ggml-impl.h
 new file mode 100644
-index 00000000..7fa83ee5
+index 0000000000000000000000000000000000000000..7fa83ee5ec7c58c779db88dbf5ddc241451a45e2
 --- /dev/null
 +++ b/app/src/main/cpp/ggml/ggml-impl.h
 @@ -0,0 +1,243 @@
@@ -2528,7 +2528,7 @@ index 00000000..7fa83ee5
 +#endif
 diff --git a/app/src/main/cpp/ggml/ggml-quants.c b/app/src/main/cpp/ggml/ggml-quants.c
 new file mode 100644
-index 00000000..36079796
+index 0000000000000000000000000000000000000000..36079796bd5f07eb92e23c42a2550459d73440cd
 --- /dev/null
 +++ b/app/src/main/cpp/ggml/ggml-quants.c
 @@ -0,0 +1,7382 @@
@@ -9916,7 +9916,7 @@ index 00000000..36079796
 +#endif
 diff --git a/app/src/main/cpp/ggml/ggml-quants.h b/app/src/main/cpp/ggml/ggml-quants.h
 new file mode 100644
-index 00000000..70c12c27
+index 0000000000000000000000000000000000000000..70c12c27465e8062f824166fb29d1a18eb7bc128
 --- /dev/null
 +++ b/app/src/main/cpp/ggml/ggml-quants.h
 @@ -0,0 +1,224 @@
@@ -10146,7 +10146,7 @@ index 00000000..70c12c27
 +void ggml_vec_dot_q6_K_q8_K(int n, float * restrict s, const void * restrict vx, const void * restrict vy);
 diff --git a/app/src/main/cpp/ggml/ggml.c b/app/src/main/cpp/ggml/ggml.c
 new file mode 100644
-index 00000000..204a9534
+index 0000000000000000000000000000000000000000..204a953423fe123a1fad27556ac1d6dd6752fb11
 --- /dev/null
 +++ b/app/src/main/cpp/ggml/ggml.c
 @@ -0,0 +1,19183 @@
@@ -29335,7 +29335,7 @@ index 00000000..204a9534
 +////////////////////////////////////////////////////////////////////////////////
 diff --git a/app/src/main/cpp/ggml/ggml.h b/app/src/main/cpp/ggml/ggml.h
 new file mode 100644
-index 00000000..710c08f2
+index 0000000000000000000000000000000000000000..710c08f24e255e28577c1e83ccfc3641d706c837
 --- /dev/null
 +++ b/app/src/main/cpp/ggml/ggml.h
 @@ -0,0 +1,2161 @@
@@ -31502,7 +31502,7 @@ index 00000000..710c08f2
 +#endif
 diff --git a/app/src/main/cpp/ggml/unicode.h b/app/src/main/cpp/ggml/unicode.h
 new file mode 100644
-index 00000000..4ebb3016
+index 0000000000000000000000000000000000000000..4ebb301627a6aa2b80bfb7ebf3fe1f78c47526e8
 --- /dev/null
 +++ b/app/src/main/cpp/ggml/unicode.h
 @@ -0,0 +1,462 @@
@@ -31970,7 +31970,7 @@ index 00000000..4ebb3016
 +
 diff --git a/app/src/main/cpp/ggml/whisper.cpp b/app/src/main/cpp/ggml/whisper.cpp
 new file mode 100644
-index 00000000..4a1605d9
+index 0000000000000000000000000000000000000000..4a1605d9db307217ab5c8c2283dffd008ab1b03c
 --- /dev/null
 +++ b/app/src/main/cpp/ggml/whisper.cpp
 @@ -0,0 +1,6760 @@
@@ -38737,7 +38737,7 @@ index 00000000..4a1605d9
 \ No newline at end of file
 diff --git a/app/src/main/cpp/ggml/whisper.h b/app/src/main/cpp/ggml/whisper.h
 new file mode 100644
-index 00000000..82c79eb6
+index 0000000000000000000000000000000000000000..82c79eb6493de485845f1c3d3bc9250e3ece31ec
 --- /dev/null
 +++ b/app/src/main/cpp/ggml/whisper.h
 @@ -0,0 +1,633 @@
@@ -39377,7 +39377,7 @@ index 00000000..82c79eb6
 \ No newline at end of file
 diff --git a/app/src/main/cpp/jni_common.cpp b/app/src/main/cpp/jni_common.cpp
 new file mode 100644
-index 00000000..314511f9
+index 0000000000000000000000000000000000000000..314511f9199ccf1bdd57fdbc8aad452c12d8c153
 --- /dev/null
 +++ b/app/src/main/cpp/jni_common.cpp
 @@ -0,0 +1,58 @@
@@ -39442,7 +39442,7 @@ index 00000000..314511f9
 \ No newline at end of file
 diff --git a/app/src/main/cpp/jni_common.h b/app/src/main/cpp/jni_common.h
 new file mode 100644
-index 00000000..6d7dd2dd
+index 0000000000000000000000000000000000000000..6d7dd2dd5c6f8e12c405dc9a5fc9f9e87f3c610e
 --- /dev/null
 +++ b/app/src/main/cpp/jni_common.h
 @@ -0,0 +1,22 @@
@@ -39471,7 +39471,7 @@ index 00000000..6d7dd2dd
 \ No newline at end of file
 diff --git a/app/src/main/cpp/voiceinput.cpp b/app/src/main/cpp/voiceinput.cpp
 new file mode 100644
-index 00000000..ec437427
+index 0000000000000000000000000000000000000000..ec43742704bf0d5a343704bab22bd3e0bf195f39
 --- /dev/null
 +++ b/app/src/main/cpp/voiceinput.cpp
 @@ -0,0 +1,284 @@
@@ -39762,7 +39762,7 @@ index 00000000..ec437427
 \ No newline at end of file
 diff --git a/app/src/main/cpp/voiceinput.h b/app/src/main/cpp/voiceinput.h
 new file mode 100644
-index 00000000..7005dcc6
+index 0000000000000000000000000000000000000000..7005dcc6877f81eca39b10f6802caeebf8f26dc2
 --- /dev/null
 +++ b/app/src/main/cpp/voiceinput.h
 @@ -0,0 +1,5 @@
@@ -39774,7 +39774,7 @@ index 00000000..7005dcc6
 \ No newline at end of file
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ggml/DecodingMode.java b/app/src/main/java/io/github/sspanak/tt9/ggml/DecodingMode.java
 new file mode 100644
-index 00000000..b6520109
+index 0000000000000000000000000000000000000000..b6520109616629f70a327531054bd48a08151ba8
 --- /dev/null
 +++ b/app/src/main/java/io/github/sspanak/tt9/ggml/DecodingMode.java
 @@ -0,0 +1,16 @@
@@ -39796,7 +39796,7 @@ index 00000000..b6520109
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ggml/WhisperGGML.java b/app/src/main/java/io/github/sspanak/tt9/ggml/WhisperGGML.java
 new file mode 100644
-index 00000000..a742033d
+index 0000000000000000000000000000000000000000..a742033df0cd5856682430ef88c61d0f46c17269
 --- /dev/null
 +++ b/app/src/main/java/io/github/sspanak/tt9/ggml/WhisperGGML.java
 @@ -0,0 +1,102 @@
@@ -39903,10 +39903,10 @@ index 00000000..a742033d
 +	private native void closeNative(long handle);
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ime/VoiceHandler.java b/app/src/main/java/io/github/sspanak/tt9/ime/VoiceHandler.java
-index ba349a24..0baf6f0d 100644
+index 548c823ee1f672e225b500d022a939d61ea6fe42..0ab5c301a60fd96677a4ce0ff304cc6b59fb2d99 100644
 --- a/app/src/main/java/io/github/sspanak/tt9/ime/VoiceHandler.java
 +++ b/app/src/main/java/io/github/sspanak/tt9/ime/VoiceHandler.java
-@@ -80,6 +80,7 @@ abstract class VoiceHandler extends TypingHandler {
+@@ -84,6 +84,7 @@ abstract class VoiceHandler extends SuggestionHandler {
  		statusBar.setText(R.string.loading);
  		suggestionOps.cancelDelayedAccept();
  		mInputMode.onAcceptSuggestion(suggestionOps.acceptIncomplete());
@@ -39914,7 +39914,7 @@ index ba349a24..0baf6f0d 100644
  		autoTextCase = new AutoTextCase(settings, new Sequences(), inputType);
  		beforeSpeech = textField.getStringBeforeCursor();
  		voiceInputOps.listen(mLanguage);
-@@ -94,6 +95,15 @@ abstract class VoiceHandler extends TypingHandler {
+@@ -98,6 +99,15 @@ abstract class VoiceHandler extends SuggestionHandler {
  	}
  
  
@@ -39931,10 +39931,10 @@ index ba349a24..0baf6f0d 100644
  		if (!mainView.isCommandPaletteShown()) {
  			mainView.render(); // disable the function keys
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputError.java b/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputError.java
-index e3c00e67..85451ca5 100644
+index 962987de2ec11d08a80e2270c4ecdb3f7bd3a385..440517c97bca760a3fc046d84e528d10beb8c6df 100644
 --- a/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputError.java
 +++ b/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputError.java
-@@ -1,17 +1,19 @@
+@@ -1,19 +1,21 @@
  package io.github.sspanak.tt9.ime.voice;
  
  import android.content.Context;
@@ -39943,20 +39943,23 @@ index e3c00e67..85451ca5 100644
  import androidx.annotation.NonNull;
  
  import io.github.sspanak.tt9.R;
+ import io.github.sspanak.tt9.preferences.settings.SettingsStatic;
 -import io.github.sspanak.tt9.util.sys.DeviceInfo;
  
  public class VoiceInputError {
  	public final static int ERROR_NOT_AVAILABLE = 101;
  	public final static int ERROR_INVALID_LANGUAGE = 102;
  	public final static int ERROR_CANNOT_BIND_TO_VOICE_SERVICE = 103;
+-	public final static int ERROR_START_FAILURE = 104;
 +	public final static int ERROR_NO_PERMISSION = 104;
 +	public final static int ERROR_AUDIO_CAPTURE = 105;
 +	public final static int ERROR_PROCESSING = 106;
 +	public final static int ERROR_RECOGNIZER_BUSY = 107;
++	public final static int ERROR_START_FAILURE = 108;
  
  	public final int code;
  	public final String message;
-@@ -26,23 +28,17 @@ public class VoiceInputError {
+@@ -28,23 +30,17 @@ public class VoiceInputError {
  
  
  	public boolean isNoPermission() {
@@ -39983,7 +39986,7 @@ index e3c00e67..85451ca5 100644
  	}
  
  
-@@ -58,61 +54,33 @@ public class VoiceInputError {
+@@ -65,62 +61,34 @@ public class VoiceInputError {
  		return switch (code) {
  			case ERROR_CANNOT_BIND_TO_VOICE_SERVICE
  				-> context.getString(R.string.voice_input_error_incompatible_voice_service);
@@ -40051,11 +40054,12 @@ index e3c00e67..85451ca5 100644
  			case ERROR_NOT_AVAILABLE -> "Voice input is not available.";
  			case ERROR_INVALID_LANGUAGE -> "Invalid language for voice input.";
 -			case ERROR_CANNOT_BIND_TO_VOICE_SERVICE -> "Cannot bind to the current voice input service.";
--			default -> null;
 +			case ERROR_CANNOT_BIND_TO_VOICE_SERVICE -> "Cannot bind to the voice input service.";
 +			case ERROR_AUDIO_CAPTURE -> "Failed to capture audio.";
 +			case ERROR_PROCESSING -> "Failed to process audio.";
 +			case ERROR_RECOGNIZER_BUSY -> "Voice input service is busy.";
+ 			case ERROR_START_FAILURE -> "Timed out waiting for SpeechRecognition service to start after " + SettingsStatic.VOICE_INPUT_START_FAILURE_TIMEOUT + " ms.";
+-			default -> null;
 +			default -> "Unknown voice input error code: " + code;
  		};
  	}
@@ -40063,31 +40067,32 @@ index e3c00e67..85451ca5 100644
 +}
 \ No newline at end of file
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java b/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java
-index ea511783..6f84e040 100644
+index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..f8467fa08f355704a93ee9c9289ab2df4dbf4228 100644
 --- a/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java
 +++ b/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java
-@@ -1,37 +1,73 @@
+@@ -1,38 +1,75 @@
  package io.github.sspanak.tt9.ime.voice;
  
 +import android.Manifest;
  import android.content.Context;
--import android.content.Intent;
+ import android.content.Intent;
 +import android.content.pm.PackageManager;
 +import android.media.AudioFormat;
 +import android.media.AudioRecord;
 +import android.media.MediaRecorder;
  import android.os.Handler;
  import android.os.Looper;
--import android.speech.RecognizerIntent;
+ import android.speech.RecognizerIntent;
 -import android.speech.SpeechRecognizer;
 +import android.widget.Toast;
  
  import androidx.annotation.NonNull;
  import androidx.annotation.Nullable;
-+import androidx.core.app.ActivityCompat;
- 
+-
 -import java.util.ArrayList;
 -import java.util.HashMap;
++import androidx.core.app.ActivityCompat;
++
 +import java.io.IOException;
 +import java.nio.FloatBuffer;
 +import java.nio.MappedByteBuffer;
@@ -40095,6 +40100,7 @@ index ea511783..6f84e040 100644
 +import java.util.concurrent.Executors;
 +import java.util.concurrent.Future;
 +import java.util.concurrent.atomic.AtomicBoolean;
+ import java.util.function.Consumer;
  
  import io.github.sspanak.tt9.R;
 +import io.github.sspanak.tt9.ggml.DecodingMode;
@@ -40104,7 +40110,6 @@ index ea511783..6f84e040 100644
 +import io.github.sspanak.tt9.ml.ModelData;
 +import io.github.sspanak.tt9.ml.ModelLoader;
 +import io.github.sspanak.tt9.ml.WhisperModels;
- import io.github.sspanak.tt9.util.ConsumerCompat;
  import io.github.sspanak.tt9.util.Logger;
 -import io.github.sspanak.tt9.util.sys.DeviceInfo;
  
@@ -40123,6 +40128,7 @@ index ea511783..6f84e040 100644
 +
  	@NonNull private final Context ims;
 -	@NonNull private final HashMap<Integer, Boolean> isOfflineModeDisabled;
+-	private boolean forceAlternativeInput = false;
  	@Nullable private Language language;
 -	@NonNull private final VoiceListener listener;
 -	@NonNull private final SpeechRecognizerSupportLegacy recognizerSupport;
@@ -40143,20 +40149,20 @@ index ea511783..6f84e040 100644
 +
 +	private final Handler mainHandler = new Handler(Looper.getMainLooper());
  
- 	@NonNull private final ConsumerCompat<String> onStopListening;
- 	@NonNull private final ConsumerCompat<String> onPartialResult;
- 	@NonNull private final ConsumerCompat<VoiceInputError> onListeningError;
+ 	@NonNull private final Consumer<String> onStopListening;
+ 	@NonNull private final Consumer<String> onPartialResult;
+ 	@NonNull private final Consumer<VoiceInputError> onListeningError;
 +	@Nullable private final Runnable onStartListening;
  
  
  	public VoiceInputOps(
-@@ -41,196 +77,452 @@ public class VoiceInputOps {
- 		@Nullable ConsumerCompat<String> onPartial,
- 		@Nullable ConsumerCompat<VoiceInputError> onError
+@@ -42,187 +79,465 @@ public class VoiceInputOps {
+ 		@Nullable Consumer<String> onPartial,
+ 		@Nullable Consumer<VoiceInputError> onError
  	) {
 -		isOfflineModeDisabled = new HashMap<>();
 -		listener = new VoiceListener(ims, onStart, this::onStop, this::onPartial, this::onError);
--		recognizerSupport = DeviceInfo.AT_LEAST_ANDROID_13 ? new SpeechRecognizerSupportModern(ims) : new SpeechRecognizerSupportLegacy(ims);
+-		recognizerSupport = DeviceInfo.AT_LEAST_ANDROID_13 ? new SpeechRecognizerSupportModern(ims) : new SpeechRecognizerSupportLegacy();
 -
 -		onStopListening = onStop != null ? onStop : result -> {};
 -		onPartialResult = onPartial != null ? onPartial : result -> {};
@@ -40173,76 +40179,56 @@ index ea511783..6f84e040 100644
 -
 -	static String getLocale(@NonNull Language lang) {
 -		return lang.getLocale().toString().replace("_", "-");
--	}
--
--
--	static Intent createIntent(@NonNull String locale) {
--		Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
--		intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale);
--		intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
--		intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
--		return intent;
--	}
--
--
--	private void createRecognizer(@Nullable Language language) {
--		boolean isLanguageAllowedOffline = language != null && !Boolean.TRUE.equals(isOfflineModeDisabled.get(language.getId()));
--
--		if (isLanguageAllowedOffline && DeviceInfo.AT_LEAST_ANDROID_13 && recognizerSupport.isLanguageSupportedOffline(language)) {
--			Logger.d(LOG_TAG, "Creating offline SpeechRecognizer...");
--			speechRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(ims);
--		} else if (recognizerSupport.isRecognitionAvailable) {
--			Logger.d(LOG_TAG, "Creating online SpeechRecognizer...");
--			speechRecognizer = SpeechRecognizer.createSpeechRecognizer(ims);
--		} else {
--			Logger.d(LOG_TAG, "Cannot create SpeechRecognizer, recognition not available.");
--			return;
--		}
--
--		speechRecognizer.setRecognitionListener(listener);
--	}
--
--
- 	public boolean isAvailable() {
--		return recognizerSupport.isRecognitionAvailable || recognizerSupport.isOnDeviceRecognitionAvailable;
++	public boolean isAvailable() {
 +		// Always available offline - no network required
 +		return ModelLoader.modelExists(ims, WhisperModels.ENGLISH_TINY);
  	}
  
--
- 	public boolean isListening() {
--		return listener.isListening() && speechRecognizer != null;
++	public boolean isListening() {
 +		return isListening || isProcessing;
- 	}
++	}
  
--
- 	public void listen(@Nullable Language language) {
- 		if (language == null) {
--			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_INVALID_LANGUAGE));
+-	static Intent createIntent(@Nullable String locale) {
+-		Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+-		intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+-		intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+-		if (locale != null) {
+-			intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale);
++	public void listen(@Nullable Language language) {
++		if (language == null) {
 +			Logger.e(LOG_TAG, "listen() called with NULL language");
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_INVALID_LANGUAGE));
- 			return;
++			return;
  		}
+-		return intent;
+-	}
  
--		if (!isAvailable()) {
--			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_NOT_AVAILABLE));
 +		Logger.d(LOG_TAG, "listen() called with language: " + language.getName() + " (" + language.getLocale().getLanguage() + ")");
-+
+ 
+-	private void createGoogleRecognizer(@Nullable Language language) {
+-		boolean isLanguageAllowedOffline = language != null && !Boolean.TRUE.equals(isOfflineModeDisabled.get(language.getId()));
 +		if (isListening || isProcessing) {
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_RECOGNIZER_BUSY));
- 			return;
- 		}
++			return;
++		}
  
--		if (isListening()) {
--			onListeningError.accept(new VoiceInputError(ims, SpeechRecognizer.ERROR_RECOGNIZER_BUSY));
+-		if (isLanguageAllowedOffline && DeviceInfo.AT_LEAST_ANDROID_13 && recognizerSupport.isLanguageSupportedOffline(ims, language)) {
+-			Logger.d(LOG_TAG, "Creating offline SpeechRecognizer...");
+-			speechRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(ims);
+-		} else if (recognizerSupport.isGoogleOnlineRecognitionAvailable(ims)) {
+-			Logger.d(LOG_TAG, "Creating online SpeechRecognizer...");
+-			speechRecognizer = SpeechRecognizer.createSpeechRecognizer(ims);
+-		} else {
+-			Logger.d(LOG_TAG, "Cannot create SpeechRecognizer, recognition not available.");
+-			speechRecognizer = null;
 +		if (ActivityCompat.checkSelfPermission(ims, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_NO_PERMISSION));
  			return;
  		}
  
- 		this.language = language;
--		recognizerSupport.setLanguage(language).checkOfflineSupport(this::listenAsync);
+-		speechRecognizer.setRecognitionListener(listener);
 -	}
++		this.language = language;
  
 +	// Load model asynchronously (may show download dialog)
 +	loadModelAsync(() -> {
@@ -40251,9 +40237,11 @@ index ea511783..6f84e040 100644
 +	});
 +}
  
--	private void listenAsync() {
--		Handler mainHandler = new Handler(Looper.getMainLooper());
--		mainHandler.post(this::listen);
+-	public boolean isAvailable() {
+-		return
+-			recognizerSupport.isAlternativeAvailable(ims)
+-			|| recognizerSupport.isGoogleOnlineRecognitionAvailable(ims)
+-			|| recognizerSupport.isGoogleOfflineRecognitionAvailable(ims);
 -	}
 +	private void startRecording() {
 +		try {
@@ -40263,12 +40251,15 @@ index ea511783..6f84e040 100644
 +				AudioFormat.CHANNEL_IN_MONO,
 +				AudioFormat.ENCODING_PCM_16BIT
 +			);
-+
+ 
 +			if (bufferSize == AudioRecord.ERROR || bufferSize == AudioRecord.ERROR_BAD_VALUE) {
 +				postError(new VoiceInputError(ims, VoiceInputError.ERROR_AUDIO_CAPTURE));
 +				return;
 +			}
  
+-	public boolean isListening() {
+-		return listener.isListening() && speechRecognizer != null;
+-	}
 +			audioRecord = new AudioRecord(
 +				MediaRecorder.AudioSource.VOICE_RECOGNITION,
 +				SAMPLE_RATE,
@@ -40276,43 +40267,35 @@ index ea511783..6f84e040 100644
 +				AudioFormat.ENCODING_PCM_16BIT,
 +				bufferSize * 4
 +			);
-+
+ 
 +			if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
 +				postError(new VoiceInputError(ims, VoiceInputError.ERROR_AUDIO_CAPTURE));
 +				return;
 +			}
  
--	private void listen() {
--		if (language == null) {
--			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_INVALID_LANGUAGE));
--			return;
--		}
+-	public void listen(@Nullable Language language) {
+-		this.language = language;
+-		if (forceAlternativeInput || recognizerSupport.isAlternativeAvailable(ims)) {
+-			ims.startActivity(VoiceInputPickerActivity.generateShowIntent(ims));
+-		} else {
+-			recognizerSupport.setLanguage(language).checkOfflineSupport(
+-				ims,
+-				() -> new Handler(Looper.getMainLooper()).post(this::listen)
+-			);
 +			audioSamples.clear();
 +			samplesRecorded = 0;
 +			isListening = true;
- 
--		if (!isAvailable()) {
--			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_NOT_AVAILABLE));
--			return;
--		}
++
 +			audioRecord.startRecording();
 +			Logger.d(LOG_TAG, "Started recording audio for offline STT");
- 
--		if (isListening()) {
--			onListeningError.accept(new VoiceInputError(ims, SpeechRecognizer.ERROR_RECOGNIZER_BUSY));
--			return;
--		}
++
 +			if (onStartListening != null) {
 +				mainHandler.post(onStartListening);
 +			}
- 
--		createRecognizer(language);
++
 +			// Start recording task
 +			recordingTask = executorService.submit(this::recordingLoop);
- 
--		if (speechRecognizer == null) {
--			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_NOT_AVAILABLE));
--			return;
++
 +		} catch (SecurityException e) {
 +			Logger.e(LOG_TAG, "Permission denied: " + e.getMessage());
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_NO_PERMISSION));
@@ -40320,17 +40303,10 @@ index ea511783..6f84e040 100644
 +			Logger.e(LOG_TAG, "Failed to start recording: " + e.getMessage());
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_AUDIO_CAPTURE));
  		}
-+	}
+ 	}
  
--		String locale = getLocale(language);
--
 +	private void loadModelAsync(Runnable onComplete) {
- 		try {
--			speechRecognizer.startListening(createIntent(locale));
--			Logger.d(LOG_TAG, "SpeechRecognizer started for locale: " + locale);
--		} catch (SecurityException e) {
--			Logger.e(LOG_TAG, "SpeechRecognizer start failed due to a SecurityException. " + e.getMessage());
--			onError(new VoiceInputError(ims, VoiceInputError.ERROR_CANNOT_BIND_TO_VOICE_SERVICE));
++		try {
 +			// Determine which model to use based on language
 +			ModelData model;
 +			String langCode = language != null ? language.getLocale().getLanguage() : "en";
@@ -40354,7 +40330,11 @@ index ea511783..6f84e040 100644
 +				model = WhisperModels.MULTILINGUAL_SMALL;
 +				Logger.w(LOG_TAG, "⚠️ Language " + (language != null ? language.getName() : "unknown") + " (" + mappedLangCode + ") not in supported list, using multilingual with auto-detect");
 +			}
-+
+ 
+-	private void listen() {
+-		if (language == null) {
+-			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_INVALID_LANGUAGE));
+-			return;
 +			// Check if the correct model is already loaded
 +			if (whisperModel != null && currentModel != null && currentModel.ggmlFile.equals(model.ggmlFile)) {
 +				Logger.d(LOG_TAG, "✅ Correct model already loaded (" + model.name + "), reusing");
@@ -40468,8 +40448,11 @@ index ea511783..6f84e040 100644
 +			e.printStackTrace();
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_PROCESSING));
  		}
- 	}
++	}
  
+-		if (isListening()) {
+-			onListeningError.accept(new VoiceInputError(ims, SpeechRecognizer.ERROR_RECOGNIZER_BUSY));
+-			return;
 +private void showToast(String message, int duration) {
 +	mainHandler.post(() -> Toast.makeText(ims, message, duration).show());
 +}
@@ -40477,11 +40460,7 @@ index ea511783..6f84e040 100644
 +private void onPartialResultFromModel(String text) {
 +	mainHandler.post(() -> onPartialResult.accept(text));
 +}
- 
--	public void stop() {
--		this.language = null;
--		if (speechRecognizer != null && isAvailable() && isListening()) {
--			speechRecognizer.stopListening();
++
 +private void recordingLoop() {
 +	short[] buffer = new short[1600]; // Match FUTO's buffer size
 +		int silenceFrames = 0;
@@ -40530,45 +40509,46 @@ index ea511783..6f84e040 100644
 +			Logger.e(LOG_TAG, "Error during recording: " + e.getMessage());
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_AUDIO_CAPTURE));
  		}
- 	}
++	}
  
+-		createGoogleRecognizer(language);
+-		if (speechRecognizer == null) {
+-			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_NOT_AVAILABLE));
 +	public void stop() {
 +		if (!isListening) {
-+			return;
-+		}
+ 			return;
+ 		}
  
--	private void destroy() {
--		this.language = null;
+-		String locale = getLocale(language);
 +		isListening = false;
 +		Logger.d(LOG_TAG, "Stopping recording");
  
--		// We try this multiple times, because it can fail due to a bug in the Android SDK
--		// https://github.com/sspanak/tt9/issues/593
--		for (int i = 0; i < 3 && speechRecognizer != null; i++) {
+-		try {
+-			listener.onBeforeStart();
+-			speechRecognizer.startListening(createIntent(locale));
+-			Logger.d(LOG_TAG, "SpeechRecognizer started for locale: " + locale);
+-		} catch (SecurityException e) {
+-			Logger.e(LOG_TAG, "SpeechRecognizer start failed due to a SecurityException. " + e.getMessage());
+-			onError(new VoiceInputError(ims, VoiceInputError.ERROR_CANNOT_BIND_TO_VOICE_SERVICE));
 +		// Stop recording
 +		if (audioRecord != null) {
- 			try {
--				speechRecognizer.destroy();
--			} catch (IllegalArgumentException e) {
--				if (i < 2) {
--					Logger.e(LOG_TAG, "SpeechRecognizer destroy failed. " + e.getMessage() + ". Retrying...");
--					continue;
--				} else {
--					Logger.e(LOG_TAG, "SpeechRecognizer destroy failed. " + e.getMessage() + ". Giving up and just nulling the reference.");
--				}
++			try {
 +				audioRecord.stop();
 +			} catch (Exception e) {
 +				Logger.e(LOG_TAG, "Error stopping AudioRecord: " + e.getMessage());
- 			}
-+		}
-+
++			}
+ 		}
+-	}
+ 
 +		// Cancel recording task
 +		if (recordingTask != null && !recordingTask.isDone()) {
 +			recordingTask.cancel(true);
 +		}
  
--			speechRecognizer = null;
--			Logger.d(LOG_TAG, "SpeechRecognizer destroyed");
+-	public void stop() {
+-		this.language = null;
+-		if (speechRecognizer != null && isListening()) {
+-			speechRecognizer.stopListening();
 +		// Process the recorded audio
 +		if (samplesRecorded > SAMPLE_RATE) { // At least 1 second of audio
 +			processAudio();
@@ -40584,11 +40564,22 @@ index ea511783..6f84e040 100644
 +			return;
 +		}
  
--	public boolean enableOfflineMode(@NonNull Language language, boolean yes) {
--		boolean isCurrentlyAllowed = !Boolean.TRUE.equals(isOfflineModeDisabled.get(language.getId()));
+-	private void destroy() {
+-		this.language = null;
+-
+-		// We try this multiple times, because it can fail due to a bug in the Android SDK
+-		// https://github.com/sspanak/tt9/issues/593
+-		for (int i = 0; i < 3 && speechRecognizer != null; i++) {
 +		isProcessing = true;
 +		processingTask = executorService.submit(() -> {
-+			try {
+ 			try {
+-				speechRecognizer.destroy();
+-			} catch (IllegalArgumentException e) {
+-				if (i < 2) {
+-					Logger.e(LOG_TAG, "SpeechRecognizer destroy failed. " + e.getMessage() + ". Retrying...");
+-					continue;
+-				} else {
+-					Logger.e(LOG_TAG, "SpeechRecognizer destroy failed. " + e.getMessage() + ". Giving up and just nulling the reference.");
 +				Logger.d(LOG_TAG, "Processing " + samplesRecorded + " samples with model: " + (currentModel != null ? currentModel.name : "unknown"));
 +
 +				// Get samples array
@@ -40601,10 +40592,8 @@ index ea511783..6f84e040 100644
 +				if (language != null) {
 +					langCode = WhisperModels.mapLanguageCode(language.getLocale().getLanguage());
 +					Logger.d(LOG_TAG, "Processing audio for language: " + language.getName() + " (code: " + langCode + ")");
-+				}
- 
--		if (yes != isCurrentlyAllowed) {
--			isOfflineModeDisabled.put(language.getId(), !yes);
+ 				}
++
 +				// Prepare language array
 +				String[] languages = new String[]{langCode};
 +
@@ -40631,10 +40620,12 @@ index ea511783..6f84e040 100644
 +				postError(new VoiceInputError(ims, VoiceInputError.ERROR_PROCESSING));
 +			} finally {
 +				cleanup();
-+			}
+ 			}
 +		});
 +	}
-+
+ 
+-			speechRecognizer = null;
+-			Logger.d(LOG_TAG, "SpeechRecognizer destroyed");
 +	private void cleanup() {
 +		isProcessing = false;
 +		isListening = false;
@@ -40647,21 +40638,22 @@ index ea511783..6f84e040 100644
 +			}
 +			audioRecord = null;
  		}
+-	}
  
--		return isCurrentlyAllowed != yes;
 +		// Keep model loaded for faster next recognition (like FUTO does)
 +		// Model is only closed when switching between different models or on destroy()
-+
+ 
+-	public boolean enableOfflineMode(@NonNull Language language, boolean yes) {
+-		boolean isCurrentlyAllowed = !Boolean.TRUE.equals(isOfflineModeDisabled.get(language.getId()));
 +		audioSamples.clear();
 +		samplesRecorded = 0;
- 	}
- 
++	}
++
 +	public void destroy() {
 +		cleanup();
  
--	public void enableOfflineMode() {
--		for (Integer langId : isOfflineModeDisabled.keySet()) {
--			isOfflineModeDisabled.put(langId, false);
+-		if (yes != isCurrentlyAllowed) {
+-			isOfflineModeDisabled.put(language.getId(), !yes);
 +		// Close Whisper model
 +		if (whisperModel != null) {
 +			whisperModel.close();
@@ -40669,29 +40661,24 @@ index ea511783..6f84e040 100644
 +			currentModel = null;
  		}
  
--		Logger.d(LOG_TAG, "Re-enabled offline voice input for all languages");
+-		return isCurrentlyAllowed != yes;
 +		if (executorService != null && !executorService.isShutdown()) {
 +			executorService.shutdownNow();
 +		}
  	}
  
--
--	private void onStop(@NonNull ArrayList<String> results) {
--		destroy();
--		onStopListening.accept(results.isEmpty() ? null : results.get(0));
 +	private void postResult(String result) {
 +		mainHandler.post(() -> onStopListening.accept(result));
- 	}
++	}
  
+-	public void enableOfflineMode() {
+-		isOfflineModeDisabled.replaceAll((i, v) -> false);
 +	private void postError(VoiceInputError error) {
 +		cleanup();
 +		mainHandler.post(() -> onListeningError.accept(error));
 +	}
  
--	private void onPartial(@NonNull ArrayList<String> results) {
--		if (!results.isEmpty()) {
--			onPartialResult.accept(results.get(0));
--		}
+-		Logger.d(LOG_TAG, "Re-enabled offline voice input for all languages");
 +	// Legacy compatibility methods
 +	public boolean enableOfflineMode(@NonNull Language language, boolean yes) {
 +		// Always offline, nothing to do
@@ -40702,19 +40689,45 @@ index ea511783..6f84e040 100644
 +		// Always offline, nothing to do
 +	}
  
++	/**
++	 * Upstream can hand over to an external voice input app (e.g. Futo Voice). This build always uses
++	 * the built-in Whisper engine, so there is nothing to switch; the method only keeps callers compiling.
++	 */
+ 	public VoiceInputOps forceAlternativeInput(boolean yes) {
+-		forceAlternativeInput = yes;
+ 		return this;
+ 	}
+ 
+-
+-	private void onStop(@NonNull ArrayList<String> results) {
+-		destroy();
+-		onStopListening.accept(results.isEmpty() ? null : results.get(0));
++	// Used by upstream's SpeechRecognizerSupport* and VoiceInputPickerActivity. Whisper itself does not need them.
++	public static String getLocale(@NonNull Language lang) {
++		return lang.getLocale().toString().replace("_", "-");
+ 	}
+ 
+-
+-	private void onPartial(@NonNull ArrayList<String> results) {
+-		if (!results.isEmpty()) {
+-			onPartialResult.accept(results.get(0));
++	public static Intent createIntent(@Nullable String locale) {
++		Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
++		intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
++		intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
++		if (locale != null) {
++			intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale);
+ 		}
++		return intent;
+ 	}
+ 
+-
 -	private void onError(VoiceInputError error) {
 -		destroy();
 -		onListeningError.accept(error);
-+	// Legacy compatibility methods for SpeechRecognizerSupportModern
-+	public static String getLocale(@NonNull Language language) {
-+		return language.getLocale().toString();
- 	}
- 
-+	public static android.content.Intent createIntent(String locale) {
-+		// No longer used with offline Whisper, return null
-+		return null;
-+	}
- 
+-	}
+-
+-
  	@NonNull
  	@Override
  	public String toString() {
@@ -40726,7 +40739,7 @@ index ea511783..6f84e040 100644
 +
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/AudioProcessor.java b/app/src/main/java/io/github/sspanak/tt9/ml/AudioProcessor.java
 new file mode 100644
-index 00000000..8b161f3a
+index 0000000000000000000000000000000000000000..8b161f3a37d7c62b193be7dc76e7b0ed6f31f77f
 --- /dev/null
 +++ b/app/src/main/java/io/github/sspanak/tt9/ml/AudioProcessor.java
 @@ -0,0 +1,83 @@
@@ -40815,7 +40828,7 @@ index 00000000..8b161f3a
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/ModelData.java b/app/src/main/java/io/github/sspanak/tt9/ml/ModelData.java
 new file mode 100644
-index 00000000..662e0ac2
+index 0000000000000000000000000000000000000000..662e0ac24da9093d02b0dded2de796a984758bf4
 --- /dev/null
 +++ b/app/src/main/java/io/github/sspanak/tt9/ml/ModelData.java
 @@ -0,0 +1,18 @@
@@ -40839,7 +40852,7 @@ index 00000000..662e0ac2
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/ModelLoader.java b/app/src/main/java/io/github/sspanak/tt9/ml/ModelLoader.java
 new file mode 100644
-index 00000000..0720fa02
+index 0000000000000000000000000000000000000000..0720fa02e97370e1e538a3cea61f0d632541cde9
 --- /dev/null
 +++ b/app/src/main/java/io/github/sspanak/tt9/ml/ModelLoader.java
 @@ -0,0 +1,225 @@
@@ -41070,7 +41083,7 @@ index 00000000..0720fa02
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/WhisperModels.java b/app/src/main/java/io/github/sspanak/tt9/ml/WhisperModels.java
 new file mode 100644
-index 00000000..82571a18
+index 0000000000000000000000000000000000000000..82571a188b5edfce79ac6896e9cd854624061c19
 --- /dev/null
 +++ b/app/src/main/java/io/github/sspanak/tt9/ml/WhisperModels.java
 @@ -0,0 +1,104 @@
@@ -41179,10 +41192,10 @@ index 00000000..82571a18
 +	}
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ui/tray/StatusBar.java b/app/src/main/java/io/github/sspanak/tt9/ui/tray/StatusBar.java
-index bb8d7ed6..07ab02a3 100644
+index 481773e4dc45d0d3f9ddd4b19fe2eb813dff95a4..3b8439d13de424f5312e214ddb11134c65096440 100644
 --- a/app/src/main/java/io/github/sspanak/tt9/ui/tray/StatusBar.java
 +++ b/app/src/main/java/io/github/sspanak/tt9/ui/tray/StatusBar.java
-@@ -73,7 +73,7 @@ public class StatusBar {
+@@ -161,7 +161,7 @@ public class StatusBar {
  
  
  	public void setText(VoiceInputOps voiceInputOps) {
@@ -41192,18 +41205,19 @@ index bb8d7ed6..07ab02a3 100644
  
  
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 5a338e22..a03f0d06 100644
+index 7e4a646771f94206d1d21cfc38f2e54bcadfbe30..7b70aee35f61bcee14d7ebf6b4668f139ddca411 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1,6 +1,6 @@
- <?xml version="1.0" encoding="utf-8"?>
+@@ -2,7 +2,7 @@
  <resources>
--	<string name="dictionary_url" translatable="false">https://raw.githubusercontent.com/sspanak/tt9/%1$s/downloads/%2$s</string>
-+	<string name="dictionary_url" translatable="false">https://raw.githubusercontent.com/sspanak/tt9/master/downloads/%2$s</string>
  	<string name="app_name" translatable="false">Traditional T9</string>
  	<string name="app_name_short" translatable="false">TT9</string>
+-	<string name="dictionary_url" translatable="false">https://raw.githubusercontent.com/sspanak/tt9/%1$s/downloads/%2$s</string>
++	<string name="dictionary_url" translatable="false">https://raw.githubusercontent.com/sspanak/tt9/master/downloads/%2$s</string>
+ 	<string name="system_night_mode" translatable="false">n</string>
+ 
  	<string name="app_settings">TT9 Settings</string>
-@@ -297,8 +297,8 @@
+@@ -358,8 +358,8 @@
  	<string name="virtual_key_shift" translatable="false">Shift</string>
  	<string name="virtual_key_space_korean">Space</string>
  
@@ -41215,10 +41229,10 @@ index 5a338e22..a03f0d06 100644
  	<string name="voice_input_error_incompatible_voice_service">Incompatible voice assistant</string>
  	<string name="voice_input_error_generic">Voice input error</string>
 diff --git a/app/validate-languages.gradle b/app/validate-languages.gradle
-index 6733fb52..da228d31 100644
+index bcc0627f0dfe4bbfa208b93a7819fa9f3824806d..560a205114c824afc97f1473e58fd71d382a7949 100644
 --- a/app/validate-languages.gradle
 +++ b/app/validate-languages.gradle
-@@ -233,7 +233,7 @@ ext.parseLanguageDefintion = { File languageFile, String dictionariesDir, String
+@@ -248,7 +248,7 @@ ext.parseLanguageDefintion = { File languageFile, String dictionariesDir, String
  	}
  
  	String[] localeParts = localeString.split(("[-_]"))

@@ -1,4 +1,4 @@
-# tt9
+# tt9-patch
 
 Builds [sspanak/tt9](https://github.com/sspanak/tt9) with the FUTO/Whisper voice backend
 (originally `JMTDI/tt9-futo@70c86cc`) and publishes signed APKs as releases.
@@ -37,3 +37,15 @@ If it never builds: logs are uploaded as an artifact and an issue is opened. Not
 - AI edits are only allowed in `app/` and the root Gradle files, never in `.github/`.
 - GitHub pauses scheduled workflows after 60 days without commits; the workflow makes an empty
   commit when the repo has been quiet for 45 days.
+
+## AI settings (all optional, repo variables or secrets)
+
+`PUTER_AUTH_TOKEN` (secret) is the API key for any OpenAI-compatible endpoint. Variables: `PUTER_BASE_URL`,
+`PUTER_MODEL`, `PUTER_FALLBACK_MODELS`, `PUTER_MAX_TOKENS`, and `PUTER_EXTRA_BODY` (a JSON object merged into every
+request, e.g. `{"chat_template_kwargs":{"enable_thinking":false}}` for models that can switch reasoning off).
+
+## Patch baseline
+
+`patch/futo.patch` was ported by hand onto upstream v64.0 (upstream removed `ConsumerCompat`, added
+`forceAlternativeInput`, and reworked voice input after the fork's v59 base). It applies cleanly to v64.0 and to the
+master that followed it. After each successful build the workflow stores the patch it actually used.

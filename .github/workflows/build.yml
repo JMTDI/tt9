@@ -46,6 +46,7 @@ env:
   PUTER_MODEL: ${{ vars.PUTER_MODEL || secrets.PUTER_MODEL }}
   PUTER_MAX_TOKENS: ${{ vars.PUTER_MAX_TOKENS || secrets.PUTER_MAX_TOKENS }}
   PUTER_FALLBACK_MODELS: ${{ vars.PUTER_FALLBACK_MODELS || secrets.PUTER_FALLBACK_MODELS }}
+  PUTER_EXTRA_BODY: ${{ vars.PUTER_EXTRA_BODY || secrets.PUTER_EXTRA_BODY }}
 
 jobs:
   build:
