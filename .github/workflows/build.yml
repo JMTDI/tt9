@@ -124,6 +124,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         if: steps.ver.outputs.build == 'true'
+        with:
+          # Upstream tt9 ships an old gradle-wrapper.jar that is not in Gradle's
+          # official checksum list, so the action's validation always fails on it.
+          validate-wrappers: false
 
       - name: Apply FUTO patch
         if: steps.ver.outputs.build == 'true'
