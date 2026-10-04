@@ -1,5 +1,5 @@
 diff --git a/app/build.gradle b/app/build.gradle
-index 595ea4bd6068168618dbdec0de9eba058a03f700..21074f863562f7ce2b35a36b2870a7c76a4f265c 100644
+index 595ea4bd6068168618dbdec0de9eba058a03f700..ca4baf6cd834e4afcdba20b9db723937d702ce39 100644
 --- a/app/build.gradle
 +++ b/app/build.gradle
 @@ -193,6 +193,15 @@ android {
@@ -18,12 +18,17 @@ index 595ea4bd6068168618dbdec0de9eba058a03f700..21074f863562f7ce2b35a36b2870a7c7
  	flavorDimensions = ['app']
  	productFlavors {
  		full {
-@@ -212,6 +221,16 @@ android {
+@@ -212,6 +221,21 @@ android {
  		}
  	}
  
 +	// Make lite and premium flavors share full's source files
 +	sourceSets {
++		// The Whisper model lives in src/main/ml and must end up in the APK assets,
++		// otherwise ModelLoader.modelExists() is false and the mic button is hidden.
++		main {
++			assets.srcDirs += 'src/main/ml'
++		}
 +		lite {
 +			java.srcDirs += 'src/full/java'
 +		}
@@ -39796,7 +39801,7 @@ index 0000000000000000000000000000000000000000..b6520109616629f70a327531054bd48a
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ggml/WhisperGGML.java b/app/src/main/java/io/github/sspanak/tt9/ggml/WhisperGGML.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..a742033df0cd5856682430ef88c61d0f46c17269
+index 0000000000000000000000000000000000000000..9ad80170a2a4e6eb1e06e9af5f21daf616112ebe
 --- /dev/null
 +++ b/app/src/main/java/io/github/sspanak/tt9/ggml/WhisperGGML.java
 @@ -0,0 +1,102 @@
@@ -39898,9 +39903,9 @@ index 0000000000000000000000000000000000000000..a742033df0cd5856682430ef88c61d0f
 +		}
 +	}
 +
-+	private native long openFromBufferNative(Buffer buffer);
++	private static native long openFromBufferNative(Buffer buffer);
 +	private native String inferNative(long handle, float[] samples, String prompt, String[] languages, String[] bailLanguages, int decodingMode, boolean suppressNonSpeechTokens);
-+	private native void closeNative(long handle);
++	private static native void closeNative(long handle);
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ime/VoiceHandler.java b/app/src/main/java/io/github/sspanak/tt9/ime/VoiceHandler.java
 index 548c823ee1f672e225b500d022a939d61ea6fe42..0ab5c301a60fd96677a4ce0ff304cc6b59fb2d99 100644
@@ -40067,10 +40072,10 @@ index 962987de2ec11d08a80e2270c4ecdb3f7bd3a385..440517c97bca760a3fc046d84e528d10
 +}
 \ No newline at end of file
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java b/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java
-index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..f8467fa08f355704a93ee9c9289ab2df4dbf4228 100644
+index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd9ec93c72 100644
 --- a/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java
 +++ b/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java
-@@ -1,38 +1,75 @@
+@@ -1,38 +1,72 @@
  package io.github.sspanak.tt9.ime.voice;
  
 +import android.Manifest;
@@ -40121,10 +40126,7 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..f8467fa08f355704a93ee9c9289ab2df
  	private final static String LOG_TAG = VoiceInputOps.class.getSimpleName();
  
 +	private static final int SAMPLE_RATE = 16000;
-+	private static final int MAX_RECORDING_SECONDS = 30;
-+	private static final int MAX_SAMPLES = SAMPLE_RATE * MAX_RECORDING_SECONDS;
-+	private static final float SILENCE_THRESHOLD = 0.015f;
-+	private static final int SILENCE_FRAMES_TO_STOP = 5; // ~300ms of silence (matches FUTO)
++	private static final int INITIAL_BUFFER_SIZE = 16000 * 60; // Start with 1 minute capacity
 +
  	@NonNull private final Context ims;
 -	@NonNull private final HashMap<Integer, Boolean> isOfflineModeDisabled;
@@ -40156,7 +40158,7 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..f8467fa08f355704a93ee9c9289ab2df
  
  
  	public VoiceInputOps(
-@@ -42,187 +79,465 @@ public class VoiceInputOps {
+@@ -42,187 +76,453 @@ public class VoiceInputOps {
  		@Nullable Consumer<String> onPartial,
  		@Nullable Consumer<VoiceInputError> onError
  	) {
@@ -40173,7 +40175,7 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..f8467fa08f355704a93ee9c9289ab2df
 +		this.onStopListening = onStop != null ? onStop : result -> {};
 +		this.onPartialResult = onPartial != null ? onPartial : result -> {};
 +		this.onListeningError = onError != null ? onError : error -> {};
-+		this.audioSamples = FloatBuffer.allocate(MAX_SAMPLES);
++		this.audioSamples = FloatBuffer.allocate(INITIAL_BUFFER_SIZE);
  	}
  
 -
@@ -40462,58 +40464,47 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..f8467fa08f355704a93ee9c9289ab2df
 +}
 +
 +private void recordingLoop() {
-+	short[] buffer = new short[1600]; // Match FUTO's buffer size
-+		int silenceFrames = 0;
-+		boolean hasSpeech = false;
++	short[] buffer = new short[1600];
 +
-+		try {
-+			while (isListening && samplesRecorded < MAX_SAMPLES) {
-+				int samplesRead = audioRecord.read(buffer, 0, buffer.length);
++	try {
++		while (isListening) {
++			int samplesRead = audioRecord.read(buffer, 0, buffer.length);
 +
-+				if (samplesRead > 0) {
-+					// Convert to float and append
-+					float[] floatSamples = AudioProcessor.shortToFloat(buffer);
++			if (samplesRead > 0) {
++				// Convert to float and append
++				float[] floatSamples = AudioProcessor.shortToFloat(buffer);
 +
-+					// Calculate magnitude for VAD
-+					float magnitude = AudioProcessor.calculateMagnitude(floatSamples, 0, samplesRead);
++				// Check if we need to expand the buffer
++				if (samplesRecorded + samplesRead > audioSamples.capacity()) {
++					// Double the buffer size
++					int newCapacity = audioSamples.capacity() * 2;
++					Logger.d(LOG_TAG, "Expanding audio buffer from " + audioSamples.capacity() + " to " + newCapacity);
++					FloatBuffer newBuffer = FloatBuffer.allocate(newCapacity);
++					audioSamples.flip();
++					newBuffer.put(audioSamples);
++					audioSamples = newBuffer;
++				}
 +
-+					// Check for speech
-+					if (magnitude > SILENCE_THRESHOLD) {
-+						hasSpeech = true;
-+						silenceFrames = 0;
-+					} else if (hasSpeech) {
-+						silenceFrames++;
-+					}
-+
-+					// Append samples
-+					for (int i = 0; i < samplesRead && samplesRecorded < MAX_SAMPLES; i++) {
-+						audioSamples.put(floatSamples[i]);
-+						samplesRecorded++;
-+					}
-+
-+					// Stop if we've had enough silence after speech
-+					if (hasSpeech && silenceFrames >= SILENCE_FRAMES_TO_STOP) {
-+						Logger.d(LOG_TAG, "Detected end of speech");
-+						stop();
-+						break;
-+					}
++				// Append samples
++				for (int i = 0; i < samplesRead; i++) {
++					audioSamples.put(floatSamples[i]);
++					samplesRecorded++;
 +				}
 +			}
-+
-+			// Stop recording and process
-+			if (isListening) {
-+				stop();
-+			}
-+
-+		} catch (Exception e) {
-+			Logger.e(LOG_TAG, "Error during recording: " + e.getMessage());
-+			postError(new VoiceInputError(ims, VoiceInputError.ERROR_AUDIO_CAPTURE));
  		}
-+	}
  
 -		createGoogleRecognizer(language);
 -		if (speechRecognizer == null) {
 -			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_NOT_AVAILABLE));
++		// Recording stopped manually by user
++		Logger.d(LOG_TAG, "Recording stopped by user");
++
++	} catch (Exception e) {
++		Logger.e(LOG_TAG, "Error during recording: " + e.getMessage());
++		postError(new VoiceInputError(ims, VoiceInputError.ERROR_AUDIO_CAPTURE));
++	}
++}
++
 +	public void stop() {
 +		if (!isListening) {
  			return;
@@ -40623,13 +40614,13 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..f8467fa08f355704a93ee9c9289ab2df
  			}
 +		});
 +	}
- 
--			speechRecognizer = null;
--			Logger.d(LOG_TAG, "SpeechRecognizer destroyed");
++
 +	private void cleanup() {
 +		isProcessing = false;
 +		isListening = false;
-+
+ 
+-			speechRecognizer = null;
+-			Logger.d(LOG_TAG, "SpeechRecognizer destroyed");
 +		if (audioRecord != null) {
 +			try {
 +				audioRecord.release();
@@ -40648,12 +40639,12 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..f8467fa08f355704a93ee9c9289ab2df
 +		audioSamples.clear();
 +		samplesRecorded = 0;
 +	}
-+
-+	public void destroy() {
-+		cleanup();
  
 -		if (yes != isCurrentlyAllowed) {
 -			isOfflineModeDisabled.put(language.getId(), !yes);
++	public void destroy() {
++		cleanup();
++
 +		// Close Whisper model
 +		if (whisperModel != null) {
 +			whisperModel.close();
@@ -40736,7 +40727,6 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..f8467fa08f355704a93ee9c9289ab2df
 +		return ims.getString(R.string.voice_input_listening);
  	}
  }
-+
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/AudioProcessor.java b/app/src/main/java/io/github/sspanak/tt9/ml/AudioProcessor.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..8b161f3a37d7c62b193be7dc76e7b0ed6f31f77f
@@ -41205,7 +41195,7 @@ index 481773e4dc45d0d3f9ddd4b19fe2eb813dff95a4..3b8439d13de424f5312e214ddb11134c
  
  
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 7e4a646771f94206d1d21cfc38f2e54bcadfbe30..7b70aee35f61bcee14d7ebf6b4668f139ddca411 100644
+index 7e4a646771f94206d1d21cfc38f2e54bcadfbe30..0ad82efd6e4a996b716dcaf0635772e09883676f 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -2,7 +2,7 @@
@@ -41223,8 +41213,8 @@ index 7e4a646771f94206d1d21cfc38f2e54bcadfbe30..7b70aee35f61bcee14d7ebf6b4668f13
  
 -	<string name="voice_input_listening">Speak</string>
 -	<string name="voice_input_stopping">Turning off the microphone…</string>
-+	<string name="voice_input_listening">Listening... (Press again to stop)</string>
-+	<string name="voice_input_stopping">Processing...</string>
++	<string name="voice_input_listening">Listening… (Press again to stop)</string>
++	<string name="voice_input_stopping">Processing…</string>
  	<string name="voice_input_mic_permission_is_needed">You must allow the microphone permission to use voice input.</string>
  	<string name="voice_input_error_incompatible_voice_service">Incompatible voice assistant</string>
  	<string name="voice_input_error_generic">Voice input error</string>

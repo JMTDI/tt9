@@ -47,5 +47,5 @@ request, e.g. `{"chat_template_kwargs":{"enable_thinking":false}}` for models th
 ## Patch baseline
 
 `patch/futo.patch` was ported by hand onto upstream v64.0 (upstream removed `ConsumerCompat`, added
-`forceAlternativeInput`, and reworked voice input after the fork's v59 base). It applies cleanly to v64.0 and to the
-master that followed it. After each successful build the workflow stores the patch it actually used.
+`forceAlternativeInput`, and reworked voice input after the fork's v59 base). It also carries the fork's later fixes (model packaged as an asset so the mic button appears, record-until-stopped,
+static JNI natives). It applies cleanly to v64.0 and to the master that followed it. After each successful build the workflow stores the patch it actually used.
