@@ -69,10 +69,10 @@ index 7ca4d45a5691744673911b378ddceb8e691215b0..4fb4f71eae995b9b88ab2d5ab307ca6c
  
 diff --git a/app/src/main/cpp/CMakeLists.txt b/app/src/main/cpp/CMakeLists.txt
 new file mode 100644
-index 0000000000000000000000000000000000000000..5c78fc50fbe4ed06b16cdd2a8b13cc655aaa734e
+index 0000000000000000000000000000000000000000..da8a16e1b80f9c0775ffadd2a24e419fb83b8405
 --- /dev/null
 +++ b/app/src/main/cpp/CMakeLists.txt
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,89 @@
 +
 +# For more information about using CMake with Android Studio, read the
 +# documentation: https://d.android.com/studio/projects/add-native-code.html.
@@ -124,6 +124,44 @@ index 0000000000000000000000000000000000000000..5c78fc50fbe4ed06b16cdd2a8b13cc65
 +    # List libraries link to the target library
 +    android
 +    log)
++
++
++# ---------------------------------------------------------------------------
++# Whistle (Cactus Compute, Apache-2.0): small on-device speech recognition.
++# The engine is a prebuilt static library. Only arm64 is wired up here; every
++# other ABI still builds the bridge, but as a stub that reports "unsupported".
++# ---------------------------------------------------------------------------
++add_library(whistle SHARED whistle_jni.cpp)
++target_include_directories(whistle PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
++target_compile_features(whistle PRIVATE cxx_std_17)
++
++if(ANDROID_ABI STREQUAL arm64-v8a)
++    # Pinned revision + SHA-256, so a changed or tampered download fails the build.
++    set(NEEDLE_REVISION "f84005f")
++    set(NEEDLE_URL "https://huggingface.co/Cactus-Compute/needle3/resolve/${NEEDLE_REVISION}/android-arm64/libneedle.a")
++    set(NEEDLE_SHA256 "16752fb75adea7af89bbc435a97d1cda7e71bc74d04578d551d0d3bbd5f9e633")
++    set(NEEDLE_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/cactus-needle/libneedle.a")
++
++    if(NOT EXISTS "${NEEDLE_LIBRARY}")
++        file(DOWNLOAD "${NEEDLE_URL}" "${NEEDLE_LIBRARY}"
++            EXPECTED_HASH SHA256=${NEEDLE_SHA256}
++            TLS_VERIFY ON
++            STATUS NEEDLE_DOWNLOAD_STATUS)
++        list(GET NEEDLE_DOWNLOAD_STATUS 0 NEEDLE_DOWNLOAD_CODE)
++        if(NOT NEEDLE_DOWNLOAD_CODE EQUAL 0)
++            file(REMOVE "${NEEDLE_LIBRARY}")
++            list(GET NEEDLE_DOWNLOAD_STATUS 1 NEEDLE_DOWNLOAD_MESSAGE)
++            message(FATAL_ERROR "Could not download the Whistle engine: ${NEEDLE_DOWNLOAD_MESSAGE}")
++        endif()
++    endif()
++
++    add_library(needle_engine STATIC IMPORTED GLOBAL)
++    set_target_properties(needle_engine PROPERTIES IMPORTED_LOCATION "${NEEDLE_LIBRARY}")
++    target_compile_definitions(whistle PRIVATE WHISTLE_HAS_ENGINE=1)
++    target_link_libraries(whistle PRIVATE needle_engine)
++endif()
++
++target_link_libraries(whistle PRIVATE android log m dl)
 diff --git a/app/src/main/cpp/defines.h b/app/src/main/cpp/defines.h
 new file mode 100644
 index 0000000000000000000000000000000000000000..4f5dbf7ece3ad3932c644a0dcb5572aff2847e68
@@ -39474,6 +39512,43 @@ index 0000000000000000000000000000000000000000..6d7dd2dd5c6f8e12c405dc9a5fc9f9e8
 +int registerNativeMethods(JNIEnv *env, const char *const className, const JNINativeMethod *methods,
 +                          const int numMethods);
 \ No newline at end of file
+diff --git a/app/src/main/cpp/needle.h b/app/src/main/cpp/needle.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..ec5443a227cac4743ebe8fb4eb8b401a0d64f695
+--- /dev/null
++++ b/app/src/main/cpp/needle.h
+@@ -0,0 +1,31 @@
++#ifndef NEEDLE_H
++#define NEEDLE_H
++
++#ifndef NEEDLE_API
++#define NEEDLE_API __attribute__((visibility("default")))
++#endif
++
++#define NEEDLE_TEXT 1
++#define NEEDLE_SPEECH 2
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++NEEDLE_API int needle_load(const unsigned char* cact, unsigned long long n);
++NEEDLE_API int needle_models(void);
++NEEDLE_API const char* needle_last_error(void);
++
++NEEDLE_API int needle_transcribe(
++    const float* pcm,
++    int samples,
++    const char* language,
++    const char* keywords,
++    int word_timestamps,
++    char* out,
++    int out_capacity);
++
++#ifdef __cplusplus
++}
++#endif
++#endif
 diff --git a/app/src/main/cpp/voiceinput.cpp b/app/src/main/cpp/voiceinput.cpp
 new file mode 100644
 index 0000000000000000000000000000000000000000..ec43742704bf0d5a343704bab22bd3e0bf195f39
@@ -39777,6 +39852,168 @@ index 0000000000000000000000000000000000000000..7005dcc6877f81eca39b10f6802caeeb
 +
 +int register_WhisperGGML(JNIEnv *env);
 \ No newline at end of file
+diff --git a/app/src/main/cpp/whistle_jni.cpp b/app/src/main/cpp/whistle_jni.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..87daa408a0c2071b12d8ec4b3c4c4e270615c87f
+--- /dev/null
++++ b/app/src/main/cpp/whistle_jni.cpp
+@@ -0,0 +1,156 @@
++// JNI bridge to Cactus Whistle (on-device speech recognition, Apache-2.0).
++// The engine is a prebuilt static library that is only published for some ABIs.
++// Where it is missing, WHISTLE_HAS_ENGINE is undefined and every call reports
++// "unsupported", so the Java side falls back to the multilingual Whisper model.
++
++#include <jni.h>
++
++#include <mutex>
++#include <string>
++#include <utility>
++#include <vector>
++
++#ifdef WHISTLE_HAS_ENGINE
++#include <cstdlib>
++#include "needle.h"
++#endif
++
++namespace {
++std::mutex engineMutex;
++
++void throwJava(JNIEnv *env, const char *message) {
++    jclass cls = env->FindClass("java/lang/IllegalStateException");
++    if (cls != nullptr) {
++        env->ThrowNew(cls, message);
++    }
++}
++
++#ifdef WHISTLE_HAS_ENGINE
++// The engine reads model tensors in place, so these bytes must outlive every use of the model.
++std::vector<unsigned char> loadedModelBytes;
++
++std::string lastEngineError() {
++    const char *error = needle_last_error();
++    return (error == nullptr || error[0] == '\0') ? "Whistle engine operation failed" : error;
++}
++#endif
++}  // namespace
++
++extern "C" JNIEXPORT jboolean JNICALL
++Java_io_github_sspanak_tt9_ggml_WhistleNative_isSupportedNative(JNIEnv *, jclass) {
++#ifdef WHISTLE_HAS_ENGINE
++    return JNI_TRUE;
++#else
++    return JNI_FALSE;
++#endif
++}
++
++extern "C" JNIEXPORT void JNICALL
++Java_io_github_sspanak_tt9_ggml_WhistleNative_loadModelNative(JNIEnv *env, jclass, jbyteArray modelBytes) {
++#ifdef WHISTLE_HAS_ENGINE
++    if (modelBytes == nullptr) {
++        throwJava(env, "No Whistle model data was given");
++        return;
++    }
++
++    const jsize length = env->GetArrayLength(modelBytes);
++    if (length <= 0) {
++        throwJava(env, "Whistle model data is empty");
++        return;
++    }
++
++    std::vector<unsigned char> bytes(static_cast<size_t>(length));
++    env->GetByteArrayRegion(modelBytes, 0, length, reinterpret_cast<jbyte *>(bytes.data()));
++    if (env->ExceptionCheck()) {
++        return;
++    }
++
++    std::lock_guard<std::mutex> lock(engineMutex);
++    if ((needle_models() & NEEDLE_SPEECH) != 0) {
++        return;  // already loaded; the engine holds a single process-wide speech model
++    }
++
++    // Ask the engine not to phone home. TT9 is a keyboard, so nothing it does should leave the device.
++    setenv("NEEDLE_TELEMETRY", "0", 1);
++    setenv("DO_NOT_TRACK", "1", 1);
++
++    loadedModelBytes = std::move(bytes);
++    if (needle_load(loadedModelBytes.data(), static_cast<unsigned long long>(loadedModelBytes.size())) < 0) {
++        const std::string error = lastEngineError();
++        loadedModelBytes.clear();
++        throwJava(env, error.c_str());
++        return;
++    }
++
++    if ((needle_models() & NEEDLE_SPEECH) == 0) {
++        loadedModelBytes.clear();
++        throwJava(env, "The Whistle file did not contain a speech model");
++    }
++#else
++    (void) modelBytes;
++    throwJava(env, "Whistle is not available on this CPU architecture");
++#endif
++}
++
++extern "C" JNIEXPORT jstring JNICALL
++Java_io_github_sspanak_tt9_ggml_WhistleNative_transcribeNative(JNIEnv *env, jclass, jfloatArray pcm, jstring language) {
++#ifdef WHISTLE_HAS_ENGINE
++    if (pcm == nullptr) {
++        throwJava(env, "No audio was given");
++        return nullptr;
++    }
++
++    const jsize sampleCount = env->GetArrayLength(pcm);
++    if (sampleCount <= 0) {
++        throwJava(env, "No audio was given");
++        return nullptr;
++    }
++
++    std::vector<jfloat> samples(static_cast<size_t>(sampleCount));
++    env->GetFloatArrayRegion(pcm, 0, sampleCount, samples.data());
++    if (env->ExceptionCheck()) {
++        return nullptr;
++    }
++
++    std::string languageCode;
++    if (language != nullptr) {
++        const char *chars = env->GetStringUTFChars(language, nullptr);
++        if (chars == nullptr) {
++            return nullptr;
++        }
++        languageCode = chars;
++        env->ReleaseStringUTFChars(language, chars);
++    }
++
++    std::vector<char> response(64 * 1024, '\0');
++
++    std::lock_guard<std::mutex> lock(engineMutex);
++    if ((needle_models() & NEEDLE_SPEECH) == 0) {
++        throwJava(env, "Whistle is not loaded");
++        return nullptr;
++    }
++
++    const int result = needle_transcribe(
++        samples.data(),
++        static_cast<int>(sampleCount),
++        languageCode.empty() ? nullptr : languageCode.c_str(),
++        nullptr,  // no keyword biasing
++        0,        // no word timestamps
++        response.data(),
++        static_cast<int>(response.size())
++    );
++    if (result < 0) {
++        const std::string error = lastEngineError();
++        throwJava(env, error.c_str());
++        return nullptr;
++    }
++
++    response.back() = '\0';
++    return env->NewStringUTF(response.data());
++#else
++    (void) pcm;
++    (void) language;
++    throwJava(env, "Whistle is not available on this CPU architecture");
++    return nullptr;
++#endif
++}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ggml/DecodingMode.java b/app/src/main/java/io/github/sspanak/tt9/ggml/DecodingMode.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..b6520109616629f70a327531054bd48a08151ba8
@@ -39906,6 +40143,56 @@ index 0000000000000000000000000000000000000000..9ad80170a2a4e6eb1e06e9af5f21daf6
 +	private static native long openFromBufferNative(Buffer buffer);
 +	private native String inferNative(long handle, float[] samples, String prompt, String[] languages, String[] bailLanguages, int decodingMode, boolean suppressNonSpeechTokens);
 +	private static native void closeNative(long handle);
++}
+diff --git a/app/src/main/java/io/github/sspanak/tt9/ggml/WhistleNative.java b/app/src/main/java/io/github/sspanak/tt9/ggml/WhistleNative.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..82d0222630436c6ac9897a38d933f88f0e31ee4d
+--- /dev/null
++++ b/app/src/main/java/io/github/sspanak/tt9/ggml/WhistleNative.java
+@@ -0,0 +1,44 @@
++package io.github.sspanak.tt9.ggml;
++
++import androidx.annotation.Keep;
++
++/**
++ * Thin JNI layer over Cactus Whistle. The engine keeps one process-wide speech model and is not
++ * thread-safe by itself; the native side serialises calls, so callers do not need to lock.
++ */
++@Keep
++public final class WhistleNative {
++	private static final boolean libraryLoaded;
++
++	static {
++		boolean loaded;
++		try {
++			System.loadLibrary("whistle");
++			loaded = true;
++		} catch (UnsatisfiedLinkError e) {
++			loaded = false;
++		}
++		libraryLoaded = loaded;
++	}
++
++	private WhistleNative() {}
++
++	/** False when the engine is not built for this CPU architecture. */
++	public static boolean isSupported() {
++		return libraryLoaded && isSupportedNative();
++	}
++
++	/** Loads the model unless one is already loaded. Throws IllegalStateException with the engine's message. */
++	public static void loadModel(byte[] modelBytes) {
++		loadModelNative(modelBytes);
++	}
++
++	/** @param language 2-letter code, or null to detect it. Returns the engine's JSON reply. */
++	public static String transcribe(float[] pcm16kMono, String language) {
++		return transcribeNative(pcm16kMono, language);
++	}
++
++	private static native boolean isSupportedNative();
++	private static native void loadModelNative(byte[] modelBytes);
++	private static native String transcribeNative(float[] pcm, String language);
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ime/VoiceHandler.java b/app/src/main/java/io/github/sspanak/tt9/ime/VoiceHandler.java
 index 548c823ee1f672e225b500d022a939d61ea6fe42..0ab5c301a60fd96677a4ce0ff304cc6b59fb2d99 100644
@@ -40072,10 +40359,10 @@ index 962987de2ec11d08a80e2270c4ecdb3f7bd3a385..440517c97bca760a3fc046d84e528d10
 +}
 \ No newline at end of file
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java b/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java
-index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd9ec93c72 100644
+index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..f6200e8019b9a289249d586542cc4d9edfe7d9c5 100644
 --- a/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java
 +++ b/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java
-@@ -1,38 +1,72 @@
+@@ -1,38 +1,74 @@
  package io.github.sspanak.tt9.ime.voice;
  
 +import android.Manifest;
@@ -40115,6 +40402,7 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd
 +import io.github.sspanak.tt9.ml.ModelData;
 +import io.github.sspanak.tt9.ml.ModelLoader;
 +import io.github.sspanak.tt9.ml.WhisperModels;
++import io.github.sspanak.tt9.ml.WhistleEngine;
  import io.github.sspanak.tt9.util.Logger;
 -import io.github.sspanak.tt9.util.sys.DeviceInfo;
  
@@ -40141,7 +40429,8 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd
 +
 +	private AudioRecord audioRecord;
 +	private WhisperGGML whisperModel;
-+	private ModelData currentModel; // Track which model is currently loaded
++	private ModelData currentModel; // Track which Whisper model is currently loaded (null while Whistle is in use)
++	private volatile boolean usingWhistle = false;
 +	private FloatBuffer audioSamples;
 +	private int samplesRecorded = 0;
 +
@@ -40158,7 +40447,7 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd
  
  
  	public VoiceInputOps(
-@@ -42,187 +76,453 @@ public class VoiceInputOps {
+@@ -42,187 +78,474 @@ public class VoiceInputOps {
  		@Nullable Consumer<String> onPartial,
  		@Nullable Consumer<VoiceInputError> onError
  	) {
@@ -40182,8 +40471,9 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd
 -	static String getLocale(@NonNull Language lang) {
 -		return lang.getLocale().toString().replace("_", "-");
 +	public boolean isAvailable() {
-+		// Always available offline - no network required
-+		return ModelLoader.modelExists(ims, WhisperModels.ENGLISH_TINY);
++		// There is always something to run: Whistle is bundled, and when it cannot be used (unsupported CPU,
++		// or a language it does not cover) the multilingual model is downloaded on first use.
++		return true;
  	}
  
 +	public boolean isListening() {
@@ -40261,7 +40551,6 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd
  
 -	public boolean isListening() {
 -		return listener.isListening() && speechRecognizer != null;
--	}
 +			audioRecord = new AudioRecord(
 +				MediaRecorder.AudioSource.VOICE_RECOGNITION,
 +				SAMPLE_RATE,
@@ -40269,21 +40558,12 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd
 +				AudioFormat.ENCODING_PCM_16BIT,
 +				bufferSize * 4
 +			);
- 
++
 +			if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
 +				postError(new VoiceInputError(ims, VoiceInputError.ERROR_AUDIO_CAPTURE));
 +				return;
 +			}
- 
--	public void listen(@Nullable Language language) {
--		this.language = language;
--		if (forceAlternativeInput || recognizerSupport.isAlternativeAvailable(ims)) {
--			ims.startActivity(VoiceInputPickerActivity.generateShowIntent(ims));
--		} else {
--			recognizerSupport.setLanguage(language).checkOfflineSupport(
--				ims,
--				() -> new Handler(Looper.getMainLooper()).post(this::listen)
--			);
++
 +			audioSamples.clear();
 +			samplesRecorded = 0;
 +			isListening = true;
@@ -40304,7 +40584,7 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd
 +		} catch (Exception e) {
 +			Logger.e(LOG_TAG, "Failed to start recording: " + e.getMessage());
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_AUDIO_CAPTURE));
- 		}
++		}
  	}
  
 +	private void loadModelAsync(Runnable onComplete) {
@@ -40319,11 +40599,12 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd
 +			boolean isEnglish = "en".equals(mappedLangCode);
 +			boolean isSupported = WhisperModels.isLanguageSupported(mappedLangCode);
 +
-+			if (isEnglish) {
-+				// English: use built-in English model
-+				model = WhisperModels.ENGLISH_TINY;
-+				Logger.d(LOG_TAG, "✅ Selected ENGLISH model for " + (language != null ? language.getName() : "English"));
-+			} else if (isSupported) {
++			if (WhistleEngine.canHandle(ims, mappedLangCode)) {
++				// Whistle covers English, German, French, Spanish, Italian, Dutch and Polish, and is bundled
++				Logger.d(LOG_TAG, "✅ Selected WHISTLE for " + (language != null ? language.getName() : "English"));
++				loadWhistleAsync(onComplete);
++				return;
++			} else if (isEnglish || isSupported) {
 +				// Non-English supported language: use multilingual model
 +				model = WhisperModels.MULTILINGUAL_SMALL;
 +				Logger.d(LOG_TAG, "✅ Selected MULTILINGUAL model for " + (language != null ? language.getName() : "unknown") + " (" + mappedLangCode + ")");
@@ -40333,10 +40614,17 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd
 +				Logger.w(LOG_TAG, "⚠️ Language " + (language != null ? language.getName() : "unknown") + " (" + mappedLangCode + ") not in supported list, using multilingual with auto-detect");
 +			}
  
--	private void listen() {
--		if (language == null) {
--			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_INVALID_LANGUAGE));
--			return;
+-	public void listen(@Nullable Language language) {
+-		this.language = language;
+-		if (forceAlternativeInput || recognizerSupport.isAlternativeAvailable(ims)) {
+-			ims.startActivity(VoiceInputPickerActivity.generateShowIntent(ims));
+-		} else {
+-			recognizerSupport.setLanguage(language).checkOfflineSupport(
+-				ims,
+-				() -> new Handler(Looper.getMainLooper()).post(this::listen)
+-			);
++			usingWhistle = false;
++
 +			// Check if the correct model is already loaded
 +			if (whisperModel != null && currentModel != null && currentModel.ggmlFile.equals(model.ggmlFile)) {
 +				Logger.d(LOG_TAG, "✅ Correct model already loaded (" + model.name + "), reusing");
@@ -40350,17 +40638,6 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd
 +				whisperModel.close();
 +				whisperModel = null;
 +				currentModel = null;
-+			}
-+
-+			// For English, the model is built-in, just load it
-+			if (isEnglish) {
-+				Logger.d(LOG_TAG, "Loading built-in English model from assets...");
-+				MappedByteBuffer modelBuffer = ModelLoader.loadModel(ims, model);
-+				whisperModel = new WhisperGGML(modelBuffer, this::onPartialResultFromModel);
-+				currentModel = model;
-+				Logger.d(LOG_TAG, "✅ Successfully loaded English model");
-+				onComplete.run();
-+				return;
 +			}
 +
 +			// For non-English, check if multilingual model needs to be downloaded
@@ -40411,18 +40688,14 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd
 +							public void onError(Exception e) {
 +								Logger.e(LOG_TAG, "❌ Failed to download multilingual model: " + e.getMessage());
 +								e.printStackTrace();
-+								showToast("❌ Download failed, using English model", Toast.LENGTH_LONG);
 +								isDownloading.set(false);
-+								
-+								// Fallback to English
-+								try {
-+									MappedByteBuffer modelBuffer = ModelLoader.loadModel(ims, WhisperModels.ENGLISH_TINY);
-+									whisperModel = new WhisperGGML(modelBuffer, VoiceInputOps.this::onPartialResultFromModel);
-+									currentModel = WhisperModels.ENGLISH_TINY;
-+									Logger.d(LOG_TAG, "✅ Loaded English fallback model");
-+									onComplete.run();
-+								} catch (IOException ex) {
-+									Logger.e(LOG_TAG, "Failed to load English fallback: " + ex.getMessage());
++
++								// Whistle can at least try, and detects the language itself
++								if (WhistleEngine.isSupported() && WhistleEngine.assetExists(ims)) {
++									showToast("❌ Download failed, using the built-in voice model", Toast.LENGTH_LONG);
++									loadWhistleBlocking(onComplete);
++								} else {
++									showToast("❌ Download failed", Toast.LENGTH_LONG);
 +									postError(new VoiceInputError(ims, VoiceInputError.ERROR_PROCESSING));
 +								}
 +							}
@@ -40450,11 +40723,41 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd
 +			e.printStackTrace();
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_PROCESSING));
  		}
-+	}
+ 	}
+ 
++/**
++ * Loads Whistle off the main thread, since reading and parsing the model takes a moment.
++ * Recording starts (back on the main thread) once it is ready.
++ */
++private void loadWhistleAsync(Runnable onComplete) {
++	executorService.submit(() -> loadWhistleBlocking(onComplete));
++}
+ 
+-	private void listen() {
+-		if (language == null) {
+-			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_INVALID_LANGUAGE));
+-			return;
++private void loadWhistleBlocking(Runnable onComplete) {
++	try {
++		// Whistle and the multilingual Whisper model are never needed together, so free the larger one
++		if (whisperModel != null) {
++			whisperModel.close();
++			whisperModel = null;
++			currentModel = null;
+ 		}
  
 -		if (isListening()) {
 -			onListeningError.accept(new VoiceInputError(ims, SpeechRecognizer.ERROR_RECOGNIZER_BUSY));
 -			return;
++		WhistleEngine.load(ims);
++		usingWhistle = true;
++		mainHandler.post(onComplete);
++	} catch (IOException e) {
++		Logger.e(LOG_TAG, "Failed to load Whistle: " + e.getMessage());
++		postError(new VoiceInputError(ims, VoiceInputError.ERROR_PROCESSING));
++	}
++}
++
 +private void showToast(String message, int duration) {
 +	mainHandler.post(() -> Toast.makeText(ims, message, duration).show());
 +}
@@ -40569,8 +40872,6 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd
 -				if (i < 2) {
 -					Logger.e(LOG_TAG, "SpeechRecognizer destroy failed. " + e.getMessage() + ". Retrying...");
 -					continue;
--				} else {
--					Logger.e(LOG_TAG, "SpeechRecognizer destroy failed. " + e.getMessage() + ". Giving up and just nulling the reference.");
 +				Logger.d(LOG_TAG, "Processing " + samplesRecorded + " samples with model: " + (currentModel != null ? currentModel.name : "unknown"));
 +
 +				// Get samples array
@@ -40583,21 +40884,28 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd
 +				if (language != null) {
 +					langCode = WhisperModels.mapLanguageCode(language.getLocale().getLanguage());
 +					Logger.d(LOG_TAG, "Processing audio for language: " + language.getName() + " (code: " + langCode + ")");
++				}
++
++				String result;
++				if (usingWhistle) {
++					Logger.d(LOG_TAG, "Running Whistle with language: " + langCode);
++					result = WhistleEngine.transcribe(samples, langCode, this::onPartialResultFromModel);
+ 				} else {
+-					Logger.e(LOG_TAG, "SpeechRecognizer destroy failed. " + e.getMessage() + ". Giving up and just nulling the reference.");
++					// Prepare language array
++					String[] languages = new String[]{langCode};
++
++					// Run inference
++					Logger.d(LOG_TAG, "Running Whisper inference with language hint: " + langCode);
++					result = whisperModel.infer(
++						samples,
++						"", // No prompt
++						languages,
++						new String[]{}, // No bail languages
++						DecodingMode.GREEDY.getValue(),
++						true // Suppress non-speech tokens
++					);
  				}
-+
-+				// Prepare language array
-+				String[] languages = new String[]{langCode};
-+
-+				// Run inference
-+				Logger.d(LOG_TAG, "Running Whisper inference with language hint: " + langCode);
-+				String result = whisperModel.infer(
-+					samples,
-+					"", // No prompt
-+					languages,
-+					new String[]{}, // No bail languages
-+					DecodingMode.GREEDY.getValue(),
-+					true // Suppress non-speech tokens
-+				);
 +
 +				Logger.d(LOG_TAG, "Recognition result: " + result);
 +				postResult(result);
@@ -40614,13 +40922,13 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd
  			}
 +		});
 +	}
-+
-+	private void cleanup() {
-+		isProcessing = false;
-+		isListening = false;
  
 -			speechRecognizer = null;
 -			Logger.d(LOG_TAG, "SpeechRecognizer destroyed");
++	private void cleanup() {
++		isProcessing = false;
++		isListening = false;
++
 +		if (audioRecord != null) {
 +			try {
 +				audioRecord.release();
@@ -40727,6 +41035,74 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..2de8ff5a247ff362799d276191245ebd
 +		return ims.getString(R.string.voice_input_listening);
  	}
  }
+diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/AudioChunker.java b/app/src/main/java/io/github/sspanak/tt9/ml/AudioChunker.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..30cc35c96b4cbcf3c40b1ccba0f040e71c4e266c
+--- /dev/null
++++ b/app/src/main/java/io/github/sspanak/tt9/ml/AudioChunker.java
+@@ -0,0 +1,62 @@
++package io.github.sspanak.tt9.ml;
++
++import java.util.ArrayList;
++import java.util.List;
++
++/**
++ * Splits long recordings into pieces that fit the engine's single-pass limit (30 seconds of 16 kHz audio).
++ * Cuts are placed in the quietest spot near the end of each piece, so words are rarely sliced in half.
++ */
++public final class AudioChunker {
++	public static final int SAMPLE_RATE = 16000;
++
++	/** The engine rejects or truncates anything longer than this per pass. */
++	static final int ENGINE_LIMIT = 30 * SAMPLE_RATE;
++	/** Where a long recording is normally cut, leaving the engine some headroom. */
++	static final int TARGET_LENGTH = 28 * SAMPLE_RATE;
++	/** How far back from the target we look for a pause. */
++	static final int SEARCH_SPAN = 4 * SAMPLE_RATE;
++	/** Energy is measured in 50 ms frames. */
++	static final int FRAME = SAMPLE_RATE / 20;
++
++	private AudioChunker() {}
++
++	/**
++	 * @return {start, end} sample ranges (end exclusive), in order, covering the whole input with no overlap.
++	 */
++	public static List<int[]> split(float[] samples) {
++		List<int[]> ranges = new ArrayList<>();
++		int start = 0;
++
++		while (samples.length - start > ENGINE_LIMIT) {
++			int cut = quietestCut(samples, start + TARGET_LENGTH - SEARCH_SPAN, start + TARGET_LENGTH);
++			ranges.add(new int[]{start, cut});
++			start = cut;
++		}
++
++		if (samples.length - start > 0) {
++			ranges.add(new int[]{start, samples.length});
++		}
++
++		return ranges;
++	}
++
++	private static int quietestCut(float[] samples, int from, int to) {
++		int bestFrameStart = from;
++		double bestEnergy = Double.MAX_VALUE;
++
++		for (int frameStart = from; frameStart + FRAME <= to; frameStart += FRAME) {
++			double energy = 0;
++			for (int i = frameStart; i < frameStart + FRAME; i++) {
++				energy += samples[i] * samples[i];
++			}
++
++			if (energy < bestEnergy) {
++				bestEnergy = energy;
++				bestFrameStart = frameStart;
++			}
++		}
++
++		return bestFrameStart + FRAME / 2;
++	}
++}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/AudioProcessor.java b/app/src/main/java/io/github/sspanak/tt9/ml/AudioProcessor.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..8b161f3a37d7c62b193be7dc76e7b0ed6f31f77f
@@ -41073,29 +41449,26 @@ index 0000000000000000000000000000000000000000..0720fa02e97370e1e538a3cea61f0d63
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/WhisperModels.java b/app/src/main/java/io/github/sspanak/tt9/ml/WhisperModels.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..82571a188b5edfce79ac6896e9cd854624061c19
+index 0000000000000000000000000000000000000000..c55a126a373c9c5e7a7f48f17106867199e222d1
 --- /dev/null
 +++ b/app/src/main/java/io/github/sspanak/tt9/ml/WhisperModels.java
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,96 @@
 +package io.github.sspanak.tt9.ml;
 +
 +/**
-+ * Available Whisper models for offline speech recognition
++ * Available models for offline speech recognition: Whistle (bundled) and Whisper multilingual (downloaded)
 + */
 +public class WhisperModels {
 +
-+	public static final ModelData ENGLISH_TINY = new ModelData(
-+		"English-39 (default)",
++	/**
++	 * Whistle ships inside the APK and handles English, German, French, Spanish, Italian, Dutch and Polish.
++	 * See WhistleEngine for the language list; the file is fetched by CI from Cactus Compute's release.
++	 */
++	public static final ModelData WHISTLE = new ModelData(
++		"Whistle (7 languages)",
 +		true,
-+		"tiny_en_acft_q8_0.bin.not.tflite",
-+		"4b5480aa1b14a7efc5b578ef176510970a898049671c3cd237285b3e3f6bfbfc"
-+	);
-+
-+	public static final ModelData ENGLISH_BASE = new ModelData(
-+		"English-74 (slower, more accurate)",
-+		false,
-+		"base_en_acft_q8_0.bin",
-+		"e9b4b7b81b8a28769e8aa9962aa39bb9f21b622cf6a63982e93f065ed5caf1c8"
++		WhistleEngine.ASSET_NAME,
++		"b6e02f048568ac5d01a2042556c658061e699acbc0aa2a1439f52f3d461dffeb"
 +	);
 +
 +	public static final ModelData MULTILINGUAL_SMALL = new ModelData(
@@ -41104,11 +41477,6 @@ index 0000000000000000000000000000000000000000..82571a188b5edfce79ac6896e9cd8546
 +		"tiny_acft_q8_0.bin",
 +		"07aa4d514144deacf5ffec5cacb36c93dee272fda9e64ac33a801f8cd5cbd953"
 +	);
-+
-+	public static final ModelData[] ENGLISH_MODELS = {
-+		ENGLISH_TINY,
-+		ENGLISH_BASE
-+	};
 +
 +	public static final ModelData[] MULTILINGUAL_MODELS = {
 +		MULTILINGUAL_SMALL
@@ -41179,6 +41547,169 @@ index 0000000000000000000000000000000000000000..82571a188b5edfce79ac6896e9cd8546
 +			}
 +		}
 +		return false;
++	}
++}
+diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/WhistleEngine.java b/app/src/main/java/io/github/sspanak/tt9/ml/WhistleEngine.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..6025a0ea5496b1ba9651e98a88556fcb11c6dbe4
+--- /dev/null
++++ b/app/src/main/java/io/github/sspanak/tt9/ml/WhistleEngine.java
+@@ -0,0 +1,157 @@
++package io.github.sspanak.tt9.ml;
++
++import android.content.Context;
++import android.content.res.AssetFileDescriptor;
++
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
++
++import org.json.JSONException;
++import org.json.JSONObject;
++
++import java.io.ByteArrayOutputStream;
++import java.io.FileInputStream;
++import java.io.FileNotFoundException;
++import java.io.IOException;
++import java.io.InputStream;
++import java.util.Arrays;
++import java.util.List;
++import java.util.function.Consumer;
++
++import io.github.sspanak.tt9.ggml.WhistleNative;
++import io.github.sspanak.tt9.util.Logger;
++
++/**
++ * Whistle: a 16.9 MB on-device speech recogniser for English, German, French, Spanish, Italian,
++ * Dutch and Polish. Languages outside that list use the multilingual Whisper model instead.
++ */
++public final class WhistleEngine {
++	private static final String LOG_TAG = WhistleEngine.class.getSimpleName();
++
++	/** The ".not.tflite" suffix keeps Android from compressing the asset, as with the other bundled model. */
++	public static final String ASSET_NAME = "whistle.cact.not.tflite";
++
++	private static final List<String> LANGUAGES = Arrays.asList("en", "de", "fr", "es", "it", "nl", "pl");
++
++	private static final Object LOCK = new Object();
++	private static boolean loaded = false;
++
++	private WhistleEngine() {}
++
++	/** True when the engine is built for this device's CPU. */
++	public static boolean isSupported() {
++		return WhistleNative.isSupported();
++	}
++
++	public static boolean isLanguageSupported(@Nullable String languageCode) {
++		return languageCode != null && LANGUAGES.contains(languageCode);
++	}
++
++	public static boolean assetExists(@NonNull Context context) {
++		try (AssetFileDescriptor fd = context.getAssets().openFd(ASSET_NAME)) {
++			return fd.getLength() > 0;
++		} catch (IOException e) {
++			// openFd() also fails for compressed assets, so try a plain open before giving up.
++			try (InputStream stream = context.getAssets().open(ASSET_NAME)) {
++				return stream.read() >= 0;
++			} catch (IOException ex) {
++				return false;
++			}
++		}
++	}
++
++	/** True when this device can run Whistle for the given (already mapped) language code right now. */
++	public static boolean canHandle(@NonNull Context context, @Nullable String languageCode) {
++		return isLanguageSupported(languageCode) && isSupported() && assetExists(context);
++	}
++
++	/** Loads the model from the APK assets. Safe to call repeatedly. Blocks, so keep it off the main thread. */
++	public static void load(@NonNull Context context) throws IOException {
++		synchronized (LOCK) {
++			if (loaded) {
++				return;
++			}
++
++			try {
++				WhistleNative.loadModel(readAsset(context));
++				loaded = true;
++				Logger.d(LOG_TAG, "Whistle loaded");
++			} catch (IllegalStateException e) {
++				throw new IOException("Whistle could not be loaded: " + e.getMessage(), e);
++			}
++		}
++	}
++
++	/**
++	 * Transcribes a recording of any length, one piece at a time.
++	 *
++	 * @param samples   16 kHz mono floats in the range -1..1
++	 * @param language  2-letter code, or null to let the engine detect it
++	 * @param onPartial called after each piece with everything recognised so far
++	 */
++	@NonNull
++	public static String transcribe(@NonNull float[] samples, @Nullable String language, @Nullable Consumer<String> onPartial) {
++		StringBuilder text = new StringBuilder();
++
++		for (int[] range : AudioChunker.split(samples)) {
++			float[] piece = Arrays.copyOfRange(samples, range[0], range[1]);
++			String pieceText = parseText(WhistleNative.transcribe(piece, language));
++
++			if (pieceText.isEmpty()) {
++				continue; // silence
++			}
++
++			if (text.length() > 0) {
++				text.append(' ');
++			}
++			text.append(pieceText);
++
++			if (onPartial != null) {
++				onPartial.accept(text.toString());
++			}
++		}
++
++		return text.toString();
++	}
++
++	@NonNull
++	static String parseText(@Nullable String json) {
++		if (json == null || json.isEmpty()) {
++			return "";
++		}
++
++		try {
++			return new JSONObject(json).optString("text", "").trim();
++		} catch (JSONException e) {
++			Logger.w(LOG_TAG, "Unreadable Whistle reply: " + e.getMessage());
++			return "";
++		}
++	}
++
++	@NonNull
++	private static byte[] readAsset(@NonNull Context context) throws IOException {
++		try (AssetFileDescriptor fd = context.getAssets().openFd(ASSET_NAME);
++			FileInputStream stream = fd.createInputStream()) {
++			byte[] bytes = new byte[(int) fd.getLength()];
++			int offset = 0;
++			while (offset < bytes.length) {
++				int read = stream.read(bytes, offset, bytes.length - offset);
++				if (read < 0) {
++					throw new IOException("The Whistle model in the APK is truncated");
++				}
++				offset += read;
++			}
++			return bytes;
++		} catch (FileNotFoundException compressed) {
++			try (InputStream stream = context.getAssets().open(ASSET_NAME)) {
++				ByteArrayOutputStream out = new ByteArrayOutputStream(18 * 1024 * 1024);
++				byte[] buffer = new byte[64 * 1024];
++				int read;
++				while ((read = stream.read(buffer)) >= 0) {
++					out.write(buffer, 0, read);
++				}
++				return out.toByteArray();
++			}
++		}
 +	}
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ui/tray/StatusBar.java b/app/src/main/java/io/github/sspanak/tt9/ui/tray/StatusBar.java

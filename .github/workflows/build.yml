@@ -196,7 +196,7 @@ jobs:
           TAG="${{ steps.ver.outputs.tag }}"
           git -C tt9 diff --full-index "$TAG" HEAD -- . \
             ':(exclude)app/src/main/AndroidManifest.xml' \
-            ':(exclude)app/src/main/ml/tiny_en_acft_q8_0.bin.not.tflite' \
+            ':(exclude)app/src/main/ml/whistle.cact.not.tflite' \
             ':(exclude)app/src/main/res/raw/cert.der' > new.patch
           cp new.patch "dist/futo-${TAG}.patch"
           if ! cmp -s new.patch ci/patch/futo.patch; then

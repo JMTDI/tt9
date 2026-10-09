@@ -23,10 +23,26 @@ if ! git apply --3way --index "$PATCH"; then
   git diff --name-only --diff-filter=U
 fi
 
-# 2. Binary files the patch can't carry as text: Whisper model + certificate.
+# 2. Binary files the patch can't carry as text: the certificate, and the Whistle speech model.
+#    Whistle (Cactus Compute, Apache-2.0) is downloaded rather than stored in this repo, and its
+#    SHA-256 is checked, so a changed or corrupted download fails the build instead of shipping.
+#    The ".not.tflite" suffix keeps Android from compressing it inside the APK.
+WHISTLE_URL="${WHISTLE_URL:-https://huggingface.co/Cactus-Compute/whistle/resolve/d3ea19e/whistle.cact?download=true}"
+WHISTLE_SHA256="${WHISTLE_SHA256:-b6e02f048568ac5d01a2042556c658061e699acbc0aa2a1439f52f3d461dffeb}"
+WHISTLE_FILE="app/src/main/ml/whistle.cact.not.tflite"
+
 mkdir -p app/src/main/ml app/src/main/res/raw
-cp "$ME/patch/binaries/tiny_en_acft_q8_0.bin.not.tflite" app/src/main/ml/
 cp "$ME/patch/binaries/cert.der" app/src/main/res/raw/
+
+curl -fsSL --retry 4 --retry-delay 5 --retry-all-errors -o "$WHISTLE_FILE.part" "$WHISTLE_URL" \
+  || { echo "::error::Could not download the Whistle model from $WHISTLE_URL"; rm -f "$WHISTLE_FILE.part"; exit 1; }
+if ! echo "$WHISTLE_SHA256  $WHISTLE_FILE.part" | sha256sum -c --status -; then
+  echo "::error::Whistle model checksum mismatch (got $(sha256sum "$WHISTLE_FILE.part" | cut -d' ' -f1))"
+  rm -f "$WHISTLE_FILE.part"
+  exit 1
+fi
+mv "$WHISTLE_FILE.part" "$WHISTLE_FILE"
+echo "Whistle model downloaded and verified ($(stat -c %s "$WHISTLE_FILE") bytes)"
 
 # 3. Manifest: add only the permissions. Version numbers stay upstream's
 #    (the original commit hardcoded versionCode 59, which breaks upgrades).
