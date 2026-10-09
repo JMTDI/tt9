@@ -69,10 +69,10 @@ index 7ca4d45a5691744673911b378ddceb8e691215b0..4fb4f71eae995b9b88ab2d5ab307ca6c
  
 diff --git a/app/src/main/cpp/CMakeLists.txt b/app/src/main/cpp/CMakeLists.txt
 new file mode 100644
-index 0000000000000000000000000000000000000000..da8a16e1b80f9c0775ffadd2a24e419fb83b8405
+index 0000000000000000000000000000000000000000..c8ec0df73de8066afffb84d4701fa8b46c22f14c
 --- /dev/null
 +++ b/app/src/main/cpp/CMakeLists.txt
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,55 @@
 +
 +# For more information about using CMake with Android Studio, read the
 +# documentation: https://d.android.com/studio/projects/add-native-code.html.
@@ -126,42 +126,8 @@ index 0000000000000000000000000000000000000000..da8a16e1b80f9c0775ffadd2a24e419f
 +    log)
 +
 +
-+# ---------------------------------------------------------------------------
-+# Whistle (Cactus Compute, Apache-2.0): small on-device speech recognition.
-+# The engine is a prebuilt static library. Only arm64 is wired up here; every
-+# other ABI still builds the bridge, but as a stub that reports "unsupported".
-+# ---------------------------------------------------------------------------
-+add_library(whistle SHARED whistle_jni.cpp)
-+target_include_directories(whistle PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-+target_compile_features(whistle PRIVATE cxx_std_17)
-+
-+if(ANDROID_ABI STREQUAL arm64-v8a)
-+    # Pinned revision + SHA-256, so a changed or tampered download fails the build.
-+    set(NEEDLE_REVISION "f84005f")
-+    set(NEEDLE_URL "https://huggingface.co/Cactus-Compute/needle3/resolve/${NEEDLE_REVISION}/android-arm64/libneedle.a")
-+    set(NEEDLE_SHA256 "16752fb75adea7af89bbc435a97d1cda7e71bc74d04578d551d0d3bbd5f9e633")
-+    set(NEEDLE_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/cactus-needle/libneedle.a")
-+
-+    if(NOT EXISTS "${NEEDLE_LIBRARY}")
-+        file(DOWNLOAD "${NEEDLE_URL}" "${NEEDLE_LIBRARY}"
-+            EXPECTED_HASH SHA256=${NEEDLE_SHA256}
-+            TLS_VERIFY ON
-+            STATUS NEEDLE_DOWNLOAD_STATUS)
-+        list(GET NEEDLE_DOWNLOAD_STATUS 0 NEEDLE_DOWNLOAD_CODE)
-+        if(NOT NEEDLE_DOWNLOAD_CODE EQUAL 0)
-+            file(REMOVE "${NEEDLE_LIBRARY}")
-+            list(GET NEEDLE_DOWNLOAD_STATUS 1 NEEDLE_DOWNLOAD_MESSAGE)
-+            message(FATAL_ERROR "Could not download the Whistle engine: ${NEEDLE_DOWNLOAD_MESSAGE}")
-+        endif()
-+    endif()
-+
-+    add_library(needle_engine STATIC IMPORTED GLOBAL)
-+    set_target_properties(needle_engine PROPERTIES IMPORTED_LOCATION "${NEEDLE_LIBRARY}")
-+    target_compile_definitions(whistle PRIVATE WHISTLE_HAS_ENGINE=1)
-+    target_link_libraries(whistle PRIVATE needle_engine)
-+endif()
-+
-+target_link_libraries(whistle PRIVATE android log m dl)
++# Whistle speech recognition (see whistle.cmake).
++include(${CMAKE_CURRENT_SOURCE_DIR}/whistle.cmake)
 diff --git a/app/src/main/cpp/defines.h b/app/src/main/cpp/defines.h
 new file mode 100644
 index 0000000000000000000000000000000000000000..4f5dbf7ece3ad3932c644a0dcb5572aff2847e68
@@ -39852,6 +39818,99 @@ index 0000000000000000000000000000000000000000..7005dcc6877f81eca39b10f6802caeeb
 +
 +int register_WhisperGGML(JNIEnv *env);
 \ No newline at end of file
+diff --git a/app/src/main/cpp/whistle.cmake b/app/src/main/cpp/whistle.cmake
+new file mode 100644
+index 0000000000000000000000000000000000000000..3f63739907690c8e9379c67d05c8ff2da936e63d
+--- /dev/null
++++ b/app/src/main/cpp/whistle.cmake
+@@ -0,0 +1,87 @@
++# ---------------------------------------------------------------------------
++# Whistle (Cactus Compute, Apache-2.0): small on-device speech recognition.
++# The engine is a prebuilt static library, wired up for arm64 and 32-bit ARM; every
++# other ABI (x86, x86_64) still builds the bridge, but as a stub that reports "unsupported".
++# ---------------------------------------------------------------------------
++add_library(whistle SHARED whistle_jni.cpp)
++target_include_directories(whistle PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
++target_compile_features(whistle PRIVATE cxx_std_17)
++
++# Pinned to an immutable Hugging Face commit. Wherever a SHA-256 is pinned (arm64 always), any download problem or
++# mismatch fails the build. 32-bit ARM has no SHA-256 pinned yet (set -DNEEDLE_ARMV7_SHA256=<hash> to pin it): it
++# relies on the commit pin alone, and if the file cannot be fetched or does not link, the build carries on with the
++# stub, so a 32-bit problem never breaks the app.
++set(NEEDLE_REVISION "f84005f")
++if(NOT NEEDLE_BASE_URL)
++    set(NEEDLE_BASE_URL "https://huggingface.co/Cactus-Compute/needle3/resolve")
++endif()
++set(NEEDLE_FOLDER "")
++set(NEEDLE_SHA256 "")
++set(NEEDLE_REQUIRED FALSE)
++
++if(ANDROID_ABI STREQUAL arm64-v8a)
++    set(NEEDLE_FOLDER "android-arm64")
++    set(NEEDLE_SHA256 "16752fb75adea7af89bbc435a97d1cda7e71bc74d04578d551d0d3bbd5f9e633")
++    if(NEEDLE_ARM64_SHA256)
++        set(NEEDLE_SHA256 "${NEEDLE_ARM64_SHA256}")  # override, e.g. when bumping the revision
++    endif()
++    set(NEEDLE_REQUIRED TRUE)
++elseif(ANDROID_ABI STREQUAL armeabi-v7a)
++    set(NEEDLE_FOLDER "android-armv7")
++    set(NEEDLE_SHA256 "${NEEDLE_ARMV7_SHA256}")  # pass -DNEEDLE_ARMV7_SHA256=<hash> to pin it
++endif()
++
++if(NEEDLE_FOLDER)
++    set(NEEDLE_URL "${NEEDLE_BASE_URL}/${NEEDLE_REVISION}/${NEEDLE_FOLDER}/libneedle.a")
++    set(NEEDLE_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/cactus-needle/libneedle.a")
++    set(NEEDLE_READY FALSE)
++
++    if(EXISTS "${NEEDLE_LIBRARY}")
++        set(NEEDLE_READY TRUE)
++    else()
++        if(NEEDLE_SHA256)
++            file(DOWNLOAD "${NEEDLE_URL}" "${NEEDLE_LIBRARY}" EXPECTED_HASH SHA256=${NEEDLE_SHA256}
++                TLS_VERIFY ON STATUS NEEDLE_DOWNLOAD_STATUS)
++        else()
++            file(DOWNLOAD "${NEEDLE_URL}" "${NEEDLE_LIBRARY}" TLS_VERIFY ON STATUS NEEDLE_DOWNLOAD_STATUS)
++        endif()
++        list(GET NEEDLE_DOWNLOAD_STATUS 0 NEEDLE_DOWNLOAD_CODE)
++        list(GET NEEDLE_DOWNLOAD_STATUS 1 NEEDLE_DOWNLOAD_MESSAGE)
++        if(NEEDLE_DOWNLOAD_CODE EQUAL 0)
++            set(NEEDLE_READY TRUE)
++            file(SHA256 "${NEEDLE_LIBRARY}" NEEDLE_ACTUAL_SHA256)
++            message(STATUS "Whistle engine ${NEEDLE_FOLDER}: sha256 ${NEEDLE_ACTUAL_SHA256}")
++        else()
++            file(REMOVE "${NEEDLE_LIBRARY}")
++            if(NEEDLE_REQUIRED OR NEEDLE_SHA256)
++                message(FATAL_ERROR "Could not download the Whistle engine (${NEEDLE_FOLDER}): ${NEEDLE_DOWNLOAD_MESSAGE}")
++            else()
++                message(WARNING "Whistle engine unavailable for ${ANDROID_ABI} (${NEEDLE_DOWNLOAD_MESSAGE}); building the stub instead.")
++            endif()
++        endif()
++    endif()
++
++    # An unpinned engine must also link cleanly here; if it does not, fall back to the stub rather than break the build.
++    if(NEEDLE_READY AND NOT NEEDLE_REQUIRED)
++        file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/needle_link_test.cpp"
++            "#include \"needle.h\"\nint main() { return needle_models() < 0 ? 1 : 0; }\n")
++        try_compile(NEEDLE_LINKS "${CMAKE_CURRENT_BINARY_DIR}/needle_link_test"
++            SOURCES "${CMAKE_CURRENT_BINARY_DIR}/needle_link_test.cpp"
++            LINK_LIBRARIES "${NEEDLE_LIBRARY}"
++            CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${CMAKE_CURRENT_SOURCE_DIR}"
++            OUTPUT_VARIABLE NEEDLE_LINK_LOG)
++        if(NOT NEEDLE_LINKS)
++            message(WARNING "Whistle engine for ${ANDROID_ABI} does not link here; building the stub instead.\n${NEEDLE_LINK_LOG}")
++            set(NEEDLE_READY FALSE)
++        endif()
++    endif()
++
++    if(NEEDLE_READY)
++        add_library(needle_engine STATIC IMPORTED GLOBAL)
++        set_target_properties(needle_engine PROPERTIES IMPORTED_LOCATION "${NEEDLE_LIBRARY}")
++        target_compile_definitions(whistle PRIVATE WHISTLE_HAS_ENGINE=1)
++        target_link_libraries(whistle PRIVATE needle_engine)
++    endif()
++endif()
++
++target_link_libraries(whistle PRIVATE android log m dl)
 diff --git a/app/src/main/cpp/whistle_jni.cpp b/app/src/main/cpp/whistle_jni.cpp
 new file mode 100644
 index 0000000000000000000000000000000000000000..87daa408a0c2071b12d8ec4b3c4c4e270615c87f
@@ -40146,10 +40205,10 @@ index 0000000000000000000000000000000000000000..9ad80170a2a4e6eb1e06e9af5f21daf6
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ggml/WhistleNative.java b/app/src/main/java/io/github/sspanak/tt9/ggml/WhistleNative.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..82d0222630436c6ac9897a38d933f88f0e31ee4d
+index 0000000000000000000000000000000000000000..45027b93293219ff9b3d15cd4b9be694307f0cb2
 --- /dev/null
 +++ b/app/src/main/java/io/github/sspanak/tt9/ggml/WhistleNative.java
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,58 @@
 +package io.github.sspanak.tt9.ggml;
 +
 +import androidx.annotation.Keep;
@@ -40161,19 +40220,33 @@ index 0000000000000000000000000000000000000000..82d0222630436c6ac9897a38d933f88f
 +@Keep
 +public final class WhistleNative {
 +	private static final boolean libraryLoaded;
++	private static final String loadError;
 +
 +	static {
 +		boolean loaded;
++		String error = null;
 +		try {
 +			System.loadLibrary("whistle");
 +			loaded = true;
 +		} catch (UnsatisfiedLinkError e) {
 +			loaded = false;
++			error = e.getMessage();
 +		}
 +		libraryLoaded = loaded;
++		loadError = error;
 +	}
 +
 +	private WhistleNative() {}
++
++	/** False when the library could not be loaded at all (wrong CPU, missing symbols, old Android). */
++	public static boolean isLibraryLoaded() {
++		return libraryLoaded;
++	}
++
++	/** The loader's message when {@link #isLibraryLoaded()} is false, otherwise null. */
++	public static String getLoadError() {
++		return loadError;
++	}
 +
 +	/** False when the engine is not built for this CPU architecture. */
 +	public static boolean isSupported() {
@@ -40359,7 +40432,7 @@ index 962987de2ec11d08a80e2270c4ecdb3f7bd3a385..440517c97bca760a3fc046d84e528d10
 +}
 \ No newline at end of file
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java b/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java
-index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..f6200e8019b9a289249d586542cc4d9edfe7d9c5 100644
+index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..e70d033f567be2b11bf66d6e21f2e50d4101c1f8 100644
 --- a/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java
 +++ b/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java
 @@ -1,38 +1,74 @@
@@ -40447,7 +40520,7 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..f6200e8019b9a289249d586542cc4d9e
  
  
  	public VoiceInputOps(
-@@ -42,187 +78,474 @@ public class VoiceInputOps {
+@@ -42,187 +78,480 @@ public class VoiceInputOps {
  		@Nullable Consumer<String> onPartial,
  		@Nullable Consumer<VoiceInputError> onError
  	) {
@@ -40605,6 +40678,12 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..f6200e8019b9a289249d586542cc4d9e
 +				loadWhistleAsync(onComplete);
 +				return;
 +			} else if (isEnglish || isSupported) {
++				if (WhistleEngine.isLanguageSupported(mappedLangCode)) {
++					// Whistle covers this language, so the slower model is a surprise: say why it is being used.
++					String reason = WhistleEngine.unavailableReason(ims);
++					Logger.e(LOG_TAG, "Whistle not used for " + mappedLangCode + ": " + reason);
++					showToast("Whistle unavailable: " + reason + ". Using the slower multilingual model.", Toast.LENGTH_LONG);
++				}
 +				// Non-English supported language: use multilingual model
 +				model = WhisperModels.MULTILINGUAL_SMALL;
 +				Logger.d(LOG_TAG, "✅ Selected MULTILINGUAL model for " + (language != null ? language.getName() : "unknown") + " (" + mappedLangCode + ")");
@@ -40922,13 +41001,13 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..f6200e8019b9a289249d586542cc4d9e
  			}
 +		});
 +	}
- 
--			speechRecognizer = null;
--			Logger.d(LOG_TAG, "SpeechRecognizer destroyed");
++
 +	private void cleanup() {
 +		isProcessing = false;
 +		isListening = false;
-+
+ 
+-			speechRecognizer = null;
+-			Logger.d(LOG_TAG, "SpeechRecognizer destroyed");
 +		if (audioRecord != null) {
 +			try {
 +				audioRecord.release();
@@ -40947,12 +41026,12 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..f6200e8019b9a289249d586542cc4d9e
 +		audioSamples.clear();
 +		samplesRecorded = 0;
 +	}
++
++	public void destroy() {
++		cleanup();
  
 -		if (yes != isCurrentlyAllowed) {
 -			isOfflineModeDisabled.put(language.getId(), !yes);
-+	public void destroy() {
-+		cleanup();
-+
 +		// Close Whisper model
 +		if (whisperModel != null) {
 +			whisperModel.close();
@@ -41551,14 +41630,15 @@ index 0000000000000000000000000000000000000000..c55a126a373c9c5e7a7f48f171068671
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/WhistleEngine.java b/app/src/main/java/io/github/sspanak/tt9/ml/WhistleEngine.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..6025a0ea5496b1ba9651e98a88556fcb11c6dbe4
+index 0000000000000000000000000000000000000000..fe7de88b085cc26656768733f82d1a9bf3e93e8f
 --- /dev/null
 +++ b/app/src/main/java/io/github/sspanak/tt9/ml/WhistleEngine.java
-@@ -0,0 +1,157 @@
+@@ -0,0 +1,181 @@
 +package io.github.sspanak.tt9.ml;
 +
 +import android.content.Context;
 +import android.content.res.AssetFileDescriptor;
++import android.os.Build;
 +
 +import androidx.annotation.NonNull;
 +import androidx.annotation.Nullable;
@@ -41620,6 +41700,29 @@ index 0000000000000000000000000000000000000000..6025a0ea5496b1ba9651e98a88556fcb
 +	/** True when this device can run Whistle for the given (already mapped) language code right now. */
 +	public static boolean canHandle(@NonNull Context context, @Nullable String languageCode) {
 +		return isLanguageSupported(languageCode) && isSupported() && assetExists(context);
++	}
++
++	/**
++	 * Why Whistle cannot run on this device, in words a user can read, or null when it can.
++	 * Shown to the user instead of silently switching to the slower multilingual model.
++	 */
++	@Nullable
++	public static String unavailableReason(@NonNull Context context) {
++		if (!WhistleNative.isLibraryLoaded()) {
++			String error = WhistleNative.getLoadError();
++			return "the Whistle library could not load" + (error != null ? " (" + error + ")" : "");
++		}
++
++		if (!WhistleNative.isSupported()) {
++			String[] abis = Build.SUPPORTED_ABIS;
++			return "this app has no Whistle engine for your CPU (" + (abis != null && abis.length > 0 ? abis[0] : "unknown") + ")";
++		}
++
++		if (!assetExists(context)) {
++			return "the Whistle model file is missing from the app";
++		}
++
++		return null;
 +	}
 +
 +	/** Loads the model from the APK assets. Safe to call repeatedly. Blocks, so keep it off the main thread. */

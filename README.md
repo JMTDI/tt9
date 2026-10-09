@@ -56,8 +56,14 @@ static JNI natives). It applies cleanly to v64.0 and to the master that followed
   for English, German, French, Spanish, Italian, Dutch and Polish. It replaces the old English-only Whisper model.
   Recordings longer than 30 seconds are split at pauses and transcribed piece by piece.
 - **Whisper multilingual** (39 MB, downloaded on first use, as before) handles every other language.
-- On a CPU architecture the Whistle engine is not wired up for (everything except arm64-v8a), the bridge builds as a
-  stub and all languages, English included, use the downloaded Whisper model instead.
+- The engine is wired up for **arm64-v8a** and **armeabi-v7a** (32-bit ARM, common on keypad phones). On x86/x86_64 the
+  bridge builds as a stub, and all languages, English included, use the downloaded Whisper model instead.
+- If Whistle cannot be used for one of its seven languages, the app now says why in a toast (CPU not supported, library
+  failed to load, or model missing) instead of silently switching to the slower model.
+- The 32-bit engine is pinned to the same immutable Hugging Face commit as arm64 but has no SHA-256 pinned yet. Pin it
+  with `curl -L https://huggingface.co/Cactus-Compute/needle3/resolve/f84005f/android-armv7/libneedle.a | sha256sum`,
+  then pass `-DNEEDLE_ARMV7_SHA256=<hash>` (or put it in `whistle.cmake`). Once pinned, any mismatch fails the build.
+  If the 32-bit engine cannot be downloaded, or will not link, the build still succeeds with the stub for that CPU.
 - The Whistle engine is a prebuilt, closed-source static library (`libneedle.a`), downloaded at build time from a pinned
   Hugging Face revision and checked against a SHA-256 in `app/src/main/cpp/CMakeLists.txt`. Its published docs say
   it sends anonymous usage counts unless `NEEDLE_TELEMETRY=0` / `DO_NOT_TRACK=1` is set; the bridge sets both before
