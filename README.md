@@ -63,7 +63,11 @@ static JNI natives). It applies cleanly to v64.0 and to the master that followed
 - Each engine is pinned in `app/src/main/cpp/whistle.cmake` to an immutable Hugging Face commit **and** a SHA-256, checked
   by hand after download. A checksum mismatch always stops the build. arm64 must download; the 32-bit engine is
   forgiving: if it cannot be fetched or will not link, the build still succeeds with the stub for that CPU, and the stub
-  records why, so the toast on the phone names the cause.
+  records why, so the toast on the phone names the cause (it lists the first missing symbols if the link fails).
+- Cactus built the 32-bit archive with a newer libc++ than this app's NDK (28.2), so it needs one function the older
+  libc++ lacks, `std::__ndk1::__hash_memory`. `whistle_compat.cpp` supplies it (the same MurmurHash2 libc++ uses, weak
+  and hidden, so a newer NDK's own copy wins). It is only compiled for 32-bit ARM. The older-Android `stderr` problem
+  does not apply, because this app's minimum is Android 7 (API 24).
 - The Whistle engine is a prebuilt, closed-source static library (`libneedle.a`), downloaded at build time (pins above). Its published docs say
   it sends anonymous usage counts unless `NEEDLE_TELEMETRY=0` / `DO_NOT_TRACK=1` is set; the bridge sets both before
   loading, but that behaviour comes from the vendor's documentation and has not been verified in the binary. To check,

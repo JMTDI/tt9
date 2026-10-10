@@ -39820,10 +39820,10 @@ index 0000000000000000000000000000000000000000..7005dcc6877f81eca39b10f6802caeeb
 \ No newline at end of file
 diff --git a/app/src/main/cpp/whistle.cmake b/app/src/main/cpp/whistle.cmake
 new file mode 100644
-index 0000000000000000000000000000000000000000..43155497a1e6001c55c4cba6fa3a549f1b9ead79
+index 0000000000000000000000000000000000000000..f27b9a086d456f3358d8be04996cb03d7c8588a9
 --- /dev/null
 +++ b/app/src/main/cpp/whistle.cmake
-@@ -0,0 +1,109 @@
+@@ -0,0 +1,142 @@
 +# ---------------------------------------------------------------------------
 +# Whistle (Cactus Compute, Apache-2.0): small on-device speech recognition.
 +# The engine is a prebuilt static library, wired up for arm64 and 32-bit ARM; every
@@ -39846,6 +39846,11 @@ index 0000000000000000000000000000000000000000..43155497a1e6001c55c4cba6fa3a549f
 +set(NEEDLE_SHA256 "")
 +set(NEEDLE_REQUIRED FALSE)
 +set(WHISTLE_STUB_REASON "")
++set(WHISTLE_COMPAT_SOURCES "")
++set(WHISTLE_COMPAT_DEFS "")
++if(WHISTLE_COMPAT_FORCE)
++    set(WHISTLE_COMPAT_DEFS "-DWHISTLE_COMPAT_FORCE=1")
++endif()
 +
 +if(ANDROID_ABI STREQUAL arm64-v8a)
 +    set(NEEDLE_REVISION "f84005f")
@@ -39856,6 +39861,8 @@ index 0000000000000000000000000000000000000000..43155497a1e6001c55c4cba6fa3a549f
 +    endif()
 +    set(NEEDLE_REQUIRED TRUE)
 +elseif(ANDROID_ABI STREQUAL armeabi-v7a)
++    # Cactus built this archive with a newer libc++ than our NDK; whistle_compat.cpp supplies what is missing.
++    set(WHISTLE_COMPAT_SOURCES "${CMAKE_CURRENT_LIST_DIR}/whistle_compat.cpp")
 +    # The last commit that changed android-armv7 in Cactus-Compute/needle3 when this was pinned.
 +    set(NEEDLE_REVISION "80896a6582ec288abc3f39d0026e931975926c60")
 +    set(NEEDLE_FOLDER "android-armv7")
@@ -39866,6 +39873,8 @@ index 0000000000000000000000000000000000000000..43155497a1e6001c55c4cba6fa3a549f
 +else()
 +    set(WHISTLE_STUB_REASON "no engine is published for ${ANDROID_ABI}")
 +endif()
++
++set(WHISTLE_SYSTEM_LIBS android log m dl)
 +
 +if(NEEDLE_FOLDER)
 +    set(NEEDLE_URL "${NEEDLE_BASE_URL}/${NEEDLE_REVISION}/${NEEDLE_FOLDER}/libneedle.a")
@@ -39902,12 +39911,30 @@ index 0000000000000000000000000000000000000000..43155497a1e6001c55c4cba6fa3a549f
 +        file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/needle_link_test.cpp"
 +            "#include \"needle.h\"\nint main() { return needle_models() < 0 ? 1 : 0; }\n")
 +        try_compile(NEEDLE_LINKS "${CMAKE_CURRENT_BINARY_DIR}/needle_link_test"
-+            SOURCES "${CMAKE_CURRENT_BINARY_DIR}/needle_link_test.cpp"
-+            LINK_LIBRARIES "${NEEDLE_LIBRARY}"
++            SOURCES "${CMAKE_CURRENT_BINARY_DIR}/needle_link_test.cpp" ${WHISTLE_COMPAT_SOURCES}
++            COMPILE_DEFINITIONS ${WHISTLE_COMPAT_DEFS}
++            LINK_LIBRARIES "${NEEDLE_LIBRARY}" ${WHISTLE_SYSTEM_LIBS}
 +            CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${CMAKE_CURRENT_SOURCE_DIR}"
 +            OUTPUT_VARIABLE NEEDLE_LINK_LOG)
 +        if(NOT NEEDLE_LINKS)
-+            string(REGEX MATCH "(undefined[^\n]*|error:[^\n]*|ld[^\n]*error[^\n]*)" NEEDLE_LINK_ERROR "${NEEDLE_LINK_LOG}")
++            # Report the real cause: the missing symbols first, then any linker/compiler error line.
++            string(REGEX MATCHALL "undefined (symbol|reference)[^\n]*" NEEDLE_LINK_UNDEFINED "${NEEDLE_LINK_LOG}")
++            list(REMOVE_DUPLICATES NEEDLE_LINK_UNDEFINED)
++            list(LENGTH NEEDLE_LINK_UNDEFINED NEEDLE_LINK_UNDEFINED_COUNT)
++            if(NEEDLE_LINK_UNDEFINED_COUNT GREATER 0)
++                list(SUBLIST NEEDLE_LINK_UNDEFINED 0 3 NEEDLE_LINK_SHOWN)
++                string(REPLACE ";" " | " NEEDLE_LINK_SHOWN "${NEEDLE_LINK_SHOWN}")
++                set(NEEDLE_LINK_ERROR "${NEEDLE_LINK_UNDEFINED_COUNT} missing: ${NEEDLE_LINK_SHOWN}")
++            else()
++                string(REGEX MATCHALL "[^\n]*(error|Error)[^\n]*" NEEDLE_LINK_ERRORS "${NEEDLE_LINK_LOG}")
++                list(FILTER NEEDLE_LINK_ERRORS EXCLUDE REGEX "Wl,|-Wl|\\.dir/")
++                list(LENGTH NEEDLE_LINK_ERRORS NEEDLE_LINK_ERRORS_COUNT)
++                if(NEEDLE_LINK_ERRORS_COUNT GREATER 0)
++                    list(GET NEEDLE_LINK_ERRORS 0 NEEDLE_LINK_ERROR)
++                else()
++                    set(NEEDLE_LINK_ERROR "unknown linker failure, see the build log")
++                endif()
++            endif()
 +            set(WHISTLE_STUB_REASON "engine did not link: ${NEEDLE_LINK_ERROR}")
 +            message(WARNING "Whistle engine for ${ANDROID_ABI} does not link here; building the stub instead.\n${NEEDLE_LINK_LOG}")
 +            set(NEEDLE_READY FALSE)
@@ -39919,6 +39946,12 @@ index 0000000000000000000000000000000000000000..43155497a1e6001c55c4cba6fa3a549f
 +        set_target_properties(needle_engine PROPERTIES IMPORTED_LOCATION "${NEEDLE_LIBRARY}")
 +        target_compile_definitions(whistle PRIVATE WHISTLE_HAS_ENGINE=1)
 +        target_link_libraries(whistle PRIVATE needle_engine)
++        if(WHISTLE_COMPAT_SOURCES)
++            target_sources(whistle PRIVATE ${WHISTLE_COMPAT_SOURCES})
++            if(WHISTLE_COMPAT_FORCE)
++                target_compile_definitions(whistle PRIVATE WHISTLE_COMPAT_FORCE=1)
++            endif()
++        endif()
 +    endif()
 +endif()
 +
@@ -39932,7 +39965,83 @@ index 0000000000000000000000000000000000000000..43155497a1e6001c55c4cba6fa3a549f
 +    target_compile_definitions(whistle PRIVATE "WHISTLE_STUB_REASON=\"${WHISTLE_STUB_REASON_SHORT}\"")
 +endif()
 +
-+target_link_libraries(whistle PRIVATE android log m dl)
++target_link_libraries(whistle PRIVATE ${WHISTLE_SYSTEM_LIBS})
+diff --git a/app/src/main/cpp/whistle_compat.cpp b/app/src/main/cpp/whistle_compat.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..7ba657abe4afc1cf23e8307336122a23e7d749d8
+--- /dev/null
++++ b/app/src/main/cpp/whistle_compat.cpp
+@@ -0,0 +1,23 @@
++// Compatibility for Cactus's prebuilt 32-bit ARM Whistle engine (libneedle.a).
++//
++// That archive was built with a newer libc++ than the NDK this app builds with, and expects one function the older
++// libc++ does not have. Defining it here lets the archive link. It only needs to hash consistently inside this
++// library, so libc++'s own algorithm is reproduced. The definition is weak and hidden: a newer NDK that already
++// provides the real one wins, and nothing leaks into other libraries.
++// WHISTLE_COMPAT_FORCE exists only so the CMake wiring can be tested on a PC.
++#if defined(__arm__) || defined(WHISTLE_COMPAT_FORCE)
++
++#include <stddef.h>
++
++#include "whistle_hash.h"
++
++namespace std {
++inline namespace __ndk1 {
++__attribute__((weak, visibility("hidden")))
++size_t __hash_memory(const void *key, size_t len) noexcept {
++    return static_cast<size_t>(whistle_murmur2(key, static_cast<uint32_t>(len)));
++}
++}  // namespace __ndk1
++}  // namespace std
++
++#endif
+diff --git a/app/src/main/cpp/whistle_hash.h b/app/src/main/cpp/whistle_hash.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..119983067a445507b901015a27439da5bf6ae2ef
+--- /dev/null
++++ b/app/src/main/cpp/whistle_hash.h
+@@ -0,0 +1,41 @@
++// MurmurHash2 as libc++ uses it for 32-bit size_t (seed = length). Kept in a header so it can be unit-tested on a PC.
++#ifndef WHISTLE_HASH_H
++#define WHISTLE_HASH_H
++
++#include <stdint.h>
++
++static inline uint32_t whistle_murmur2(const void *key, uint32_t len) {
++    const unsigned char *s = static_cast<const unsigned char *>(key);
++    const uint32_t m = 0x5bd1e995u;
++    const uint32_t r = 24;
++    uint32_t h = len;
++
++    for (; len >= 4; s += 4, len -= 4) {
++        uint32_t k;
++        __builtin_memcpy(&k, s, sizeof(k));  // unaligned-safe load, little-endian on every Android CPU
++        k *= m;
++        k ^= k >> r;
++        k *= m;
++        h *= m;
++        h ^= k;
++    }
++
++    switch (len) {
++        case 3:
++            h ^= static_cast<uint32_t>(s[2]) << 16;
++            // fall through
++        case 2:
++            h ^= static_cast<uint32_t>(s[1]) << 8;
++            // fall through
++        case 1:
++            h ^= static_cast<uint32_t>(s[0]);
++            h *= m;
++    }
++
++    h ^= h >> 13;
++    h *= m;
++    h ^= h >> 15;
++    return h;
++}
++
++#endif
 diff --git a/app/src/main/cpp/whistle_jni.cpp b/app/src/main/cpp/whistle_jni.cpp
 new file mode 100644
 index 0000000000000000000000000000000000000000..099bb321a138aaa5b875a0aa5d8772382f2436c0
