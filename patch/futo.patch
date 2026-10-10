@@ -39820,10 +39820,10 @@ index 0000000000000000000000000000000000000000..7005dcc6877f81eca39b10f6802caeeb
 \ No newline at end of file
 diff --git a/app/src/main/cpp/whistle.cmake b/app/src/main/cpp/whistle.cmake
 new file mode 100644
-index 0000000000000000000000000000000000000000..3f63739907690c8e9379c67d05c8ff2da936e63d
+index 0000000000000000000000000000000000000000..43155497a1e6001c55c4cba6fa3a549f1b9ead79
 --- /dev/null
 +++ b/app/src/main/cpp/whistle.cmake
-@@ -0,0 +1,87 @@
+@@ -0,0 +1,109 @@
 +# ---------------------------------------------------------------------------
 +# Whistle (Cactus Compute, Apache-2.0): small on-device speech recognition.
 +# The engine is a prebuilt static library, wired up for arm64 and 32-bit ARM; every
@@ -39833,19 +39833,22 @@ index 0000000000000000000000000000000000000000..3f63739907690c8e9379c67d05c8ff2d
 +target_include_directories(whistle PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 +target_compile_features(whistle PRIVATE cxx_std_17)
 +
-+# Pinned to an immutable Hugging Face commit. Wherever a SHA-256 is pinned (arm64 always), any download problem or
-+# mismatch fails the build. 32-bit ARM has no SHA-256 pinned yet (set -DNEEDLE_ARMV7_SHA256=<hash> to pin it): it
-+# relies on the commit pin alone, and if the file cannot be fetched or does not link, the build carries on with the
-+# stub, so a 32-bit problem never breaks the app.
-+set(NEEDLE_REVISION "f84005f")
++# Each ABI is pinned to an immutable Hugging Face commit plus a SHA-256. A checksum mismatch always fails the build.
++# arm64 must work (any download problem fails the build). 32-bit ARM is forgiving: if its engine cannot be fetched
++# or does not link, the build carries on with the stub, so a 32-bit problem never breaks the app. The stub records
++# why, and the app shows that reason to the user.
 +if(NOT NEEDLE_BASE_URL)
 +    set(NEEDLE_BASE_URL "https://huggingface.co/Cactus-Compute/needle3/resolve")
 +endif()
++
++set(NEEDLE_REVISION "")
 +set(NEEDLE_FOLDER "")
 +set(NEEDLE_SHA256 "")
 +set(NEEDLE_REQUIRED FALSE)
++set(WHISTLE_STUB_REASON "")
 +
 +if(ANDROID_ABI STREQUAL arm64-v8a)
++    set(NEEDLE_REVISION "f84005f")
 +    set(NEEDLE_FOLDER "android-arm64")
 +    set(NEEDLE_SHA256 "16752fb75adea7af89bbc435a97d1cda7e71bc74d04578d551d0d3bbd5f9e633")
 +    if(NEEDLE_ARM64_SHA256)
@@ -39853,8 +39856,15 @@ index 0000000000000000000000000000000000000000..3f63739907690c8e9379c67d05c8ff2d
 +    endif()
 +    set(NEEDLE_REQUIRED TRUE)
 +elseif(ANDROID_ABI STREQUAL armeabi-v7a)
++    # The last commit that changed android-armv7 in Cactus-Compute/needle3 when this was pinned.
++    set(NEEDLE_REVISION "80896a6582ec288abc3f39d0026e931975926c60")
 +    set(NEEDLE_FOLDER "android-armv7")
-+    set(NEEDLE_SHA256 "${NEEDLE_ARMV7_SHA256}")  # pass -DNEEDLE_ARMV7_SHA256=<hash> to pin it
++    set(NEEDLE_SHA256 "7ac66f83885f6ebc11618fc26943a4bde139c42d27fbd025b93672e550a8a0ad")
++    if(NEEDLE_ARMV7_SHA256)
++        set(NEEDLE_SHA256 "${NEEDLE_ARMV7_SHA256}")
++    endif()
++else()
++    set(WHISTLE_STUB_REASON "no engine is published for ${ANDROID_ABI}")
 +endif()
 +
 +if(NEEDLE_FOLDER)
@@ -39865,29 +39875,29 @@ index 0000000000000000000000000000000000000000..3f63739907690c8e9379c67d05c8ff2d
 +    if(EXISTS "${NEEDLE_LIBRARY}")
 +        set(NEEDLE_READY TRUE)
 +    else()
-+        if(NEEDLE_SHA256)
-+            file(DOWNLOAD "${NEEDLE_URL}" "${NEEDLE_LIBRARY}" EXPECTED_HASH SHA256=${NEEDLE_SHA256}
-+                TLS_VERIFY ON STATUS NEEDLE_DOWNLOAD_STATUS)
-+        else()
-+            file(DOWNLOAD "${NEEDLE_URL}" "${NEEDLE_LIBRARY}" TLS_VERIFY ON STATUS NEEDLE_DOWNLOAD_STATUS)
-+        endif()
++        # Not EXPECTED_HASH: with it, CMake turns any failed download into a configure error. The hash is checked
++        # by hand below, so a wrong file always stops the build, while a missing one can fall back to the stub.
++        file(DOWNLOAD "${NEEDLE_URL}" "${NEEDLE_LIBRARY}" TLS_VERIFY ON STATUS NEEDLE_DOWNLOAD_STATUS)
 +        list(GET NEEDLE_DOWNLOAD_STATUS 0 NEEDLE_DOWNLOAD_CODE)
 +        list(GET NEEDLE_DOWNLOAD_STATUS 1 NEEDLE_DOWNLOAD_MESSAGE)
 +        if(NEEDLE_DOWNLOAD_CODE EQUAL 0)
-+            set(NEEDLE_READY TRUE)
 +            file(SHA256 "${NEEDLE_LIBRARY}" NEEDLE_ACTUAL_SHA256)
-+            message(STATUS "Whistle engine ${NEEDLE_FOLDER}: sha256 ${NEEDLE_ACTUAL_SHA256}")
++            if(NOT NEEDLE_ACTUAL_SHA256 STREQUAL NEEDLE_SHA256)
++                file(REMOVE "${NEEDLE_LIBRARY}")
++                message(FATAL_ERROR "Whistle engine (${NEEDLE_FOLDER}) checksum mismatch: expected ${NEEDLE_SHA256}, got ${NEEDLE_ACTUAL_SHA256}")
++            endif()
++            set(NEEDLE_READY TRUE)
 +        else()
 +            file(REMOVE "${NEEDLE_LIBRARY}")
-+            if(NEEDLE_REQUIRED OR NEEDLE_SHA256)
++            if(NEEDLE_REQUIRED)
 +                message(FATAL_ERROR "Could not download the Whistle engine (${NEEDLE_FOLDER}): ${NEEDLE_DOWNLOAD_MESSAGE}")
-+            else()
-+                message(WARNING "Whistle engine unavailable for ${ANDROID_ABI} (${NEEDLE_DOWNLOAD_MESSAGE}); building the stub instead.")
 +            endif()
++            set(WHISTLE_STUB_REASON "engine download failed: ${NEEDLE_DOWNLOAD_MESSAGE}")
++            message(WARNING "Whistle engine unavailable for ${ANDROID_ABI} (${NEEDLE_DOWNLOAD_MESSAGE}); building the stub instead.")
 +        endif()
 +    endif()
 +
-+    # An unpinned engine must also link cleanly here; if it does not, fall back to the stub rather than break the build.
++    # A forgiving engine must also link cleanly here; if it does not, fall back to the stub rather than break the build.
 +    if(NEEDLE_READY AND NOT NEEDLE_REQUIRED)
 +        file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/needle_link_test.cpp"
 +            "#include \"needle.h\"\nint main() { return needle_models() < 0 ? 1 : 0; }\n")
@@ -39897,6 +39907,8 @@ index 0000000000000000000000000000000000000000..3f63739907690c8e9379c67d05c8ff2d
 +            CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${CMAKE_CURRENT_SOURCE_DIR}"
 +            OUTPUT_VARIABLE NEEDLE_LINK_LOG)
 +        if(NOT NEEDLE_LINKS)
++            string(REGEX MATCH "(undefined[^\n]*|error:[^\n]*|ld[^\n]*error[^\n]*)" NEEDLE_LINK_ERROR "${NEEDLE_LINK_LOG}")
++            set(WHISTLE_STUB_REASON "engine did not link: ${NEEDLE_LINK_ERROR}")
 +            message(WARNING "Whistle engine for ${ANDROID_ABI} does not link here; building the stub instead.\n${NEEDLE_LINK_LOG}")
 +            set(NEEDLE_READY FALSE)
 +        endif()
@@ -39910,13 +39922,23 @@ index 0000000000000000000000000000000000000000..3f63739907690c8e9379c67d05c8ff2d
 +    endif()
 +endif()
 +
++# Stub only: bake the reason into the library so the app can show it. Kept short and free of characters that
++# would break a C string.
++if(WHISTLE_STUB_REASON)
++    string(REPLACE "\\" "/" WHISTLE_STUB_REASON "${WHISTLE_STUB_REASON}")
++    string(REPLACE "\"" "'" WHISTLE_STUB_REASON "${WHISTLE_STUB_REASON}")
++    string(REGEX REPLACE "[\r\n\t]+" " " WHISTLE_STUB_REASON "${WHISTLE_STUB_REASON}")
++    string(SUBSTRING "${WHISTLE_STUB_REASON}" 0 160 WHISTLE_STUB_REASON_SHORT)
++    target_compile_definitions(whistle PRIVATE "WHISTLE_STUB_REASON=\"${WHISTLE_STUB_REASON_SHORT}\"")
++endif()
++
 +target_link_libraries(whistle PRIVATE android log m dl)
 diff --git a/app/src/main/cpp/whistle_jni.cpp b/app/src/main/cpp/whistle_jni.cpp
 new file mode 100644
-index 0000000000000000000000000000000000000000..87daa408a0c2071b12d8ec4b3c4c4e270615c87f
+index 0000000000000000000000000000000000000000..099bb321a138aaa5b875a0aa5d8772382f2436c0
 --- /dev/null
 +++ b/app/src/main/cpp/whistle_jni.cpp
-@@ -0,0 +1,156 @@
+@@ -0,0 +1,170 @@
 +// JNI bridge to Cactus Whistle (on-device speech recognition, Apache-2.0).
 +// The engine is a prebuilt static library that is only published for some ABIs.
 +// Where it is missing, WHISTLE_HAS_ENGINE is undefined and every call reports
@@ -39954,6 +39976,20 @@ index 0000000000000000000000000000000000000000..87daa408a0c2071b12d8ec4b3c4c4e27
 +}
 +#endif
 +}  // namespace
++
++#ifndef WHISTLE_STUB_REASON
++#define WHISTLE_STUB_REASON ""
++#endif
++
++// Why this build has no engine (set by whistle.cmake), or "" when it does.
++extern "C" JNIEXPORT jstring JNICALL
++Java_io_github_sspanak_tt9_ggml_WhistleNative_stubReasonNative(JNIEnv *env, jclass) {
++#ifdef WHISTLE_HAS_ENGINE
++    return env->NewStringUTF("");
++#else
++    return env->NewStringUTF(WHISTLE_STUB_REASON);
++#endif
++}
 +
 +extern "C" JNIEXPORT jboolean JNICALL
 +Java_io_github_sspanak_tt9_ggml_WhistleNative_isSupportedNative(JNIEnv *, jclass) {
@@ -40205,10 +40241,10 @@ index 0000000000000000000000000000000000000000..9ad80170a2a4e6eb1e06e9af5f21daf6
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ggml/WhistleNative.java b/app/src/main/java/io/github/sspanak/tt9/ggml/WhistleNative.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..45027b93293219ff9b3d15cd4b9be694307f0cb2
+index 0000000000000000000000000000000000000000..fb938eb0cf93bcc9bbced02376a5dbf6720fc529
 --- /dev/null
 +++ b/app/src/main/java/io/github/sspanak/tt9/ggml/WhistleNative.java
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,64 @@
 +package io.github.sspanak.tt9.ggml;
 +
 +import androidx.annotation.Keep;
@@ -40248,6 +40284,11 @@ index 0000000000000000000000000000000000000000..45027b93293219ff9b3d15cd4b9be694
 +		return loadError;
 +	}
 +
++	/** Why this build has no engine (e.g. a failed download), or an empty string. Only meaningful when unsupported. */
++	public static String getStubReason() {
++		return libraryLoaded ? stubReasonNative() : "";
++	}
++
 +	/** False when the engine is not built for this CPU architecture. */
 +	public static boolean isSupported() {
 +		return libraryLoaded && isSupportedNative();
@@ -40263,6 +40304,7 @@ index 0000000000000000000000000000000000000000..45027b93293219ff9b3d15cd4b9be694
 +		return transcribeNative(pcm16kMono, language);
 +	}
 +
++	private static native String stubReasonNative();
 +	private static native boolean isSupportedNative();
 +	private static native void loadModelNative(byte[] modelBytes);
 +	private static native String transcribeNative(float[] pcm, String language);
@@ -41630,10 +41672,10 @@ index 0000000000000000000000000000000000000000..c55a126a373c9c5e7a7f48f171068671
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/WhistleEngine.java b/app/src/main/java/io/github/sspanak/tt9/ml/WhistleEngine.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..fe7de88b085cc26656768733f82d1a9bf3e93e8f
+index 0000000000000000000000000000000000000000..5101654963a999ddaf0a752791554779e7fdd75f
 --- /dev/null
 +++ b/app/src/main/java/io/github/sspanak/tt9/ml/WhistleEngine.java
-@@ -0,0 +1,181 @@
+@@ -0,0 +1,183 @@
 +package io.github.sspanak.tt9.ml;
 +
 +import android.content.Context;
@@ -41715,7 +41757,9 @@ index 0000000000000000000000000000000000000000..fe7de88b085cc26656768733f82d1a9b
 +
 +		if (!WhistleNative.isSupported()) {
 +			String[] abis = Build.SUPPORTED_ABIS;
-+			return "this app has no Whistle engine for your CPU (" + (abis != null && abis.length > 0 ? abis[0] : "unknown") + ")";
++			String why = WhistleNative.getStubReason();
++			return "this app has no Whistle engine for your CPU (" + (abis != null && abis.length > 0 ? abis[0] : "unknown") + ")"
++				+ (why != null && !why.isEmpty() ? ": " + why : "");
 +		}
 +
 +		if (!assetExists(context)) {
