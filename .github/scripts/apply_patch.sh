@@ -52,7 +52,7 @@ p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
 add = [
  ('android.permission.INTERNET',
-  '\t<uses-permission android:name="android.permission.INTERNET"/> <!-- allows downloading multilingual models -->'),
+  '\t<uses-permission android:name="android.permission.INTERNET"/> <!-- allows downloading the Whisper models picked in Settings -->'),
  ('android.permission.BLUETOOTH"',
   '\t<uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" /> <!-- Bluetooth headset voice input on Android < 12 -->'),
  ('android.permission.BLUETOOTH_CONNECT',
@@ -66,4 +66,17 @@ if block:
     open(p, "w", encoding="utf-8").write(s[:m.end()] + block + s[m.end():])
 PY
 git add "$MANIFEST"
+
+# 4. Application ID. The patch sets applicationId to com.jmtditech.tt9 (the Java package stays io.github.sspanak.tt9) and
+#    points the existing settings links at it. A link that upstream adds later would still name the old package and
+#    silently open nothing, so rewrite those too. Safe to run twice. The files are not staged on purpose: one that is
+#    still in conflict must stay visible to the conflict resolver, and build_loop.sh stages everything afterwards.
+OLD_ID="io.github.sspanak.tt9"
+NEW_ID="com.jmtditech.tt9"
+mapfile -t stale < <(grep -rl "android:targetPackage=\"$OLD_ID\"" app/src --include='*.xml' || true)
+if [ "${#stale[@]}" -gt 0 ]; then
+  sed -i "s|android:targetPackage=\"$OLD_ID\"|android:targetPackage=\"$NEW_ID\"|g" "${stale[@]}"
+  echo "Pointed ${#stale[@]} settings file(s) at $NEW_ID: ${stale[*]}"
+fi
+
 echo "apply_patch.sh: done"

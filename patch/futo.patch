@@ -1,8 +1,17 @@
 diff --git a/app/build.gradle b/app/build.gradle
-index 595ea4bd6068168618dbdec0de9eba058a03f700..ca4baf6cd834e4afcdba20b9db723937d702ce39 100644
+index 595ea4bd6068168618dbdec0de9eba058a03f700..261866d5ae1e2fe200ee59f061a3c3c73a66cb0a 100644
 --- a/app/build.gradle
 +++ b/app/build.gradle
-@@ -193,6 +193,15 @@ android {
+@@ -158,7 +158,7 @@
+ 	compileSdk = 37
+ 
+ 	defaultConfig {
+-		applicationId = PACKAGE_NAME
++		applicationId = 'com.jmtditech.tt9' // the Java package stays PACKAGE_NAME (see namespace above), only the installed app's id differs
+ 		buildFeatures.buildConfig = true
+ 		minSdk = 24
+ 		targetSdk = 37
+@@ -193,6 +193,15 @@
  		targetCompatibility JavaVersion.VERSION_17
  	}
  
@@ -18,10 +27,13 @@ index 595ea4bd6068168618dbdec0de9eba058a03f700..ca4baf6cd834e4afcdba20b9db723937
  	flavorDimensions = ['app']
  	productFlavors {
  		full {
-@@ -212,6 +221,21 @@ android {
- 		}
- 	}
- 
+@@ -209,6 +218,21 @@
+ 			dimension 'app'
+ 			buildConfigField 'Boolean', 'LITE', 'true'
+ 			buildConfigField 'Boolean', 'PREMIUM', 'true'
++		}
++	}
++
 +	// Make lite and premium flavors share full's source files
 +	sourceSets {
 +		// The Whisper model lives in src/main/ml and must end up in the APK assets,
@@ -34,12 +46,9 @@ index 595ea4bd6068168618dbdec0de9eba058a03f700..ca4baf6cd834e4afcdba20b9db723937
 +		}
 +		premium {
 +			java.srcDirs += 'src/full/java'
-+		}
-+	}
-+
- 	androidComponents {
- 		onVariants(selector().all()) { variant ->
- 			def variantName = variant.name.capitalize()
+ 		}
+ 	}
+ 
 diff --git a/app/dictionary-tools.gradle b/app/dictionary-tools.gradle
 index 7ca4d45a5691744673911b378ddceb8e691215b0..4fb4f71eae995b9b88ab2d5ab307ca6c30a87a53 100644
 --- a/app/dictionary-tools.gradle
@@ -40583,10 +40592,10 @@ index 962987de2ec11d08a80e2270c4ecdb3f7bd3a385..440517c97bca760a3fc046d84e528d10
 +}
 \ No newline at end of file
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java b/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java
-index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..e70d033f567be2b11bf66d6e21f2e50d4101c1f8 100644
+index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436e2fcb348 100644
 --- a/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java
 +++ b/app/src/main/java/io/github/sspanak/tt9/ime/voice/VoiceInputOps.java
-@@ -1,38 +1,74 @@
+@@ -1,38 +1,76 @@
  package io.github.sspanak.tt9.ime.voice;
  
 +import android.Manifest;
@@ -40604,18 +40613,15 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..e70d033f567be2b11bf66d6e21f2e50d
  
  import androidx.annotation.NonNull;
  import androidx.annotation.Nullable;
--
++import androidx.core.app.ActivityCompat;
+ 
 -import java.util.ArrayList;
 -import java.util.HashMap;
-+import androidx.core.app.ActivityCompat;
-+
 +import java.io.IOException;
 +import java.nio.FloatBuffer;
-+import java.nio.MappedByteBuffer;
 +import java.util.concurrent.ExecutorService;
 +import java.util.concurrent.Executors;
 +import java.util.concurrent.Future;
-+import java.util.concurrent.atomic.AtomicBoolean;
  import java.util.function.Consumer;
  
  import io.github.sspanak.tt9.R;
@@ -40624,7 +40630,11 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..e70d033f567be2b11bf66d6e21f2e50d
  import io.github.sspanak.tt9.languages.Language;
 +import io.github.sspanak.tt9.ml.AudioProcessor;
 +import io.github.sspanak.tt9.ml.ModelData;
++import io.github.sspanak.tt9.ml.ModelDownloader;
++import io.github.sspanak.tt9.ml.ModelDownloads;
 +import io.github.sspanak.tt9.ml.ModelLoader;
++import io.github.sspanak.tt9.ml.VoiceModelChooser;
++import io.github.sspanak.tt9.ml.VoiceModelSetting;
 +import io.github.sspanak.tt9.ml.WhisperModels;
 +import io.github.sspanak.tt9.ml.WhistleEngine;
  import io.github.sspanak.tt9.util.Logger;
@@ -40649,7 +40659,7 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..e70d033f567be2b11bf66d6e21f2e50d
 -	@Nullable private SpeechRecognizer speechRecognizer;
 +	private boolean isListening = false;
 +	private boolean isProcessing = false;
-+	private final AtomicBoolean isDownloading = new AtomicBoolean(false);
++	private volatile boolean isLoadingModel = false;
 +
 +	private AudioRecord audioRecord;
 +	private WhisperGGML whisperModel;
@@ -40671,7 +40681,7 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..e70d033f567be2b11bf66d6e21f2e50d
  
  
  	public VoiceInputOps(
-@@ -42,187 +78,480 @@ public class VoiceInputOps {
+@@ -42,24 +80,401 @@
  		@Nullable Consumer<String> onPartial,
  		@Nullable Consumer<VoiceInputError> onError
  	) {
@@ -40691,74 +40701,54 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..e70d033f567be2b11bf66d6e21f2e50d
 +		this.audioSamples = FloatBuffer.allocate(INITIAL_BUFFER_SIZE);
  	}
  
--
--	static String getLocale(@NonNull Language lang) {
--		return lang.getLocale().toString().replace("_", "-");
 +	public boolean isAvailable() {
 +		// There is always something to run: Whistle is bundled, and when it cannot be used (unsupported CPU,
 +		// or a language it does not cover) the multilingual model is downloaded on first use.
 +		return true;
- 	}
++	}
  
+-	static String getLocale(@NonNull Language lang) {
 +	public boolean isListening() {
 +		return isListening || isProcessing;
 +	}
- 
--	static Intent createIntent(@Nullable String locale) {
--		Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
--		intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
--		intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
--		if (locale != null) {
--			intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale);
++
 +	public void listen(@Nullable Language language) {
 +		if (language == null) {
 +			Logger.e(LOG_TAG, "listen() called with NULL language");
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_INVALID_LANGUAGE));
 +			return;
- 		}
--		return intent;
--	}
- 
++		}
++
 +		Logger.d(LOG_TAG, "listen() called with language: " + language.getName() + " (" + language.getLocale().getLanguage() + ")");
- 
--	private void createGoogleRecognizer(@Nullable Language language) {
--		boolean isLanguageAllowedOffline = language != null && !Boolean.TRUE.equals(isOfflineModeDisabled.get(language.getId()));
++
 +		if (isListening || isProcessing) {
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_RECOGNIZER_BUSY));
 +			return;
 +		}
- 
--		if (isLanguageAllowedOffline && DeviceInfo.AT_LEAST_ANDROID_13 && recognizerSupport.isLanguageSupportedOffline(ims, language)) {
--			Logger.d(LOG_TAG, "Creating offline SpeechRecognizer...");
--			speechRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(ims);
--		} else if (recognizerSupport.isGoogleOnlineRecognitionAvailable(ims)) {
--			Logger.d(LOG_TAG, "Creating online SpeechRecognizer...");
--			speechRecognizer = SpeechRecognizer.createSpeechRecognizer(ims);
--		} else {
--			Logger.d(LOG_TAG, "Cannot create SpeechRecognizer, recognition not available.");
--			speechRecognizer = null;
++
++		if (isLoadingModel) {
++			Logger.d(LOG_TAG, "A voice model is already loading, ignoring the request");
++			return;
++		}
++
 +		if (ActivityCompat.checkSelfPermission(ims, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_NO_PERMISSION));
- 			return;
- 		}
- 
--		speechRecognizer.setRecognitionListener(listener);
--	}
++			return;
++		}
++
 +		this.language = language;
- 
-+	// Load model asynchronously (may show download dialog)
-+	loadModelAsync(() -> {
-+		// Model loaded successfully, now start recording
-+		startRecording();
-+	});
-+}
- 
--	public boolean isAvailable() {
--		return
--			recognizerSupport.isAlternativeAvailable(ims)
--			|| recognizerSupport.isGoogleOnlineRecognitionAvailable(ims)
--			|| recognizerSupport.isGoogleOfflineRecognitionAvailable(ims);
--	}
++
++		isLoadingModel = true;
++		try {
++			// Picks the model, gets it ready without blocking the main thread, and then starts recording
++			loadModelAsync(this::startRecording);
++		} catch (RuntimeException e) {
++			Logger.e(LOG_TAG, "Failed to prepare a voice model: " + e.getMessage());
++			isLoadingModel = false;
++			postError(new VoiceInputError(ims, VoiceInputError.ERROR_PROCESSING));
++		}
++	}
++
 +	private void startRecording() {
 +		try {
 +			// Model should already be loaded by loadModelAsync
@@ -40767,14 +40757,12 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..e70d033f567be2b11bf66d6e21f2e50d
 +				AudioFormat.CHANNEL_IN_MONO,
 +				AudioFormat.ENCODING_PCM_16BIT
 +			);
- 
++
 +			if (bufferSize == AudioRecord.ERROR || bufferSize == AudioRecord.ERROR_BAD_VALUE) {
 +				postError(new VoiceInputError(ims, VoiceInputError.ERROR_AUDIO_CAPTURE));
 +				return;
 +			}
- 
--	public boolean isListening() {
--		return listener.isListening() && speechRecognizer != null;
++
 +			audioRecord = new AudioRecord(
 +				MediaRecorder.AudioSource.VOICE_RECOGNITION,
 +				SAMPLE_RATE,
@@ -40809,184 +40797,92 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..e70d033f567be2b11bf66d6e21f2e50d
 +			Logger.e(LOG_TAG, "Failed to start recording: " + e.getMessage());
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_AUDIO_CAPTURE));
 +		}
- 	}
- 
++	}
++
++	/**
++	 * Works out which model to use for the current language and the "Voice input model" setting, and gets it ready
++	 * without blocking the main thread. onComplete runs on the main thread when recording can start.
++	 *
++	 * If the wanted model is still downloading and Whistle cannot stand in for it, onComplete is not called: the user is
++	 * told to try again later, and the attempt ends quietly.
++	 */
 +	private void loadModelAsync(Runnable onComplete) {
++		String langName = language != null ? language.getName() : "English";
++		String langCode = WhisperModels.mapLanguageCode(language != null ? language.getLocale().getLanguage() : "en");
++
++		VoiceModelChooser.Choice choice = VoiceModelChooser.choose(
++			VoiceModelSetting.get(ims),
++			langCode,
++			WhistleEngine.isLanguageSupported(langCode),
++			WhistleEngine.isSupported() && WhistleEngine.assetExists(ims),
++			model -> ModelLoader.modelExists(ims, model)
++		);
++		Logger.d(LOG_TAG, "Voice model for " + langName + " (" + langCode + "): " + choice);
++
++		if (choice.download != null) {
++			ModelDownloader.start(ims, choice.download); // does nothing when it is already on its way
++		}
++
++		if (choice.whistleUnavailable) {
++			// Whistle was chosen and covers this language, so another model is a surprise: say why it is being used.
++			String reason = WhistleEngine.unavailableReason(ims);
++			Logger.e(LOG_TAG, "Whistle not used for " + langCode + ": " + reason);
++			showToast(ims.getString(R.string.voice_model_whistle_unavailable, reason, choice.wanted.displayName()), Toast.LENGTH_LONG);
++		}
++
++		if (choice.run == null) {
++			ModelDownloads.Snapshot download = ModelDownloader.snapshot(ims);
++			boolean isWanted = download.model != null && download.model.id.equals(choice.wanted.id);
++			showToast(ims.getString(R.string.voice_model_wait, choice.wanted.displayName(), isWanted ? download.percent() : 0), Toast.LENGTH_LONG);
++			isLoadingModel = false;
++			postResult(""); // ends the attempt, there is nothing to insert
++			return;
++		}
++
++		if (choice.whistleStandsIn) {
++			showToast(ims.getString(R.string.voice_model_using_whistle, choice.wanted.displayName()), Toast.LENGTH_LONG);
++		}
++
++		executorService.submit(() -> loadModelBlocking(choice.run, onComplete));
++	}
++
++	/**
++	 * Loads the model. Blocks while the file is read and parsed, so it runs on the executor, not on the main thread.
++	 */
++	private void loadModelBlocking(@NonNull ModelData model, @NonNull Runnable onComplete) {
 +		try {
-+			// Determine which model to use based on language
-+			ModelData model;
-+			String langCode = language != null ? language.getLocale().getLanguage() : "en";
-+			String mappedLangCode = WhisperModels.mapLanguageCode(langCode);
-+			Logger.d(LOG_TAG, "Loading model for language: " + (language != null ? language.getName() : "English") + " (code: " + langCode + ", mapped: " + mappedLangCode + ")");
-+
-+			// Check if this is English or if the language is supported by multilingual model
-+			boolean isEnglish = "en".equals(mappedLangCode);
-+			boolean isSupported = WhisperModels.isLanguageSupported(mappedLangCode);
-+
-+			if (WhistleEngine.canHandle(ims, mappedLangCode)) {
-+				// Whistle covers English, German, French, Spanish, Italian, Dutch and Polish, and is bundled
-+				Logger.d(LOG_TAG, "✅ Selected WHISTLE for " + (language != null ? language.getName() : "English"));
-+				loadWhistleAsync(onComplete);
-+				return;
-+			} else if (isEnglish || isSupported) {
-+				if (WhistleEngine.isLanguageSupported(mappedLangCode)) {
-+					// Whistle covers this language, so the slower model is a surprise: say why it is being used.
-+					String reason = WhistleEngine.unavailableReason(ims);
-+					Logger.e(LOG_TAG, "Whistle not used for " + mappedLangCode + ": " + reason);
-+					showToast("Whistle unavailable: " + reason + ". Using the slower multilingual model.", Toast.LENGTH_LONG);
-+				}
-+				// Non-English supported language: use multilingual model
-+				model = WhisperModels.MULTILINGUAL_SMALL;
-+				Logger.d(LOG_TAG, "✅ Selected MULTILINGUAL model for " + (language != null ? language.getName() : "unknown") + " (" + mappedLangCode + ")");
++			if (model.isBuiltinAsset) {
++				// Whistle and the Whisper models are never needed together, so free the larger one
++				closeWhisperModel();
++				WhistleEngine.load(ims);
++				usingWhistle = true;
 +			} else {
-+				// Unsupported language: fall back to multilingual and let Whisper auto-detect
-+				model = WhisperModels.MULTILINGUAL_SMALL;
-+				Logger.w(LOG_TAG, "⚠️ Language " + (language != null ? language.getName() : "unknown") + " (" + mappedLangCode + ") not in supported list, using multilingual with auto-detect");
-+			}
- 
--	public void listen(@Nullable Language language) {
--		this.language = language;
--		if (forceAlternativeInput || recognizerSupport.isAlternativeAvailable(ims)) {
--			ims.startActivity(VoiceInputPickerActivity.generateShowIntent(ims));
--		} else {
--			recognizerSupport.setLanguage(language).checkOfflineSupport(
--				ims,
--				() -> new Handler(Looper.getMainLooper()).post(this::listen)
--			);
-+			usingWhistle = false;
++				usingWhistle = false;
 +
-+			// Check if the correct model is already loaded
-+			if (whisperModel != null && currentModel != null && currentModel.ggmlFile.equals(model.ggmlFile)) {
-+				Logger.d(LOG_TAG, "✅ Correct model already loaded (" + model.name + "), reusing");
-+				onComplete.run();
-+				return;
++				if (whisperModel == null || currentModel == null || !currentModel.id.equals(model.id)) {
++					closeWhisperModel();
++					whisperModel = new WhisperGGML(ModelLoader.loadModel(ims, model), this::onPartialResultFromModel);
++					currentModel = model;
++					Logger.d(LOG_TAG, "Loaded the " + model.displayName() + " model");
++				}
 +			}
 +
-+			// Close the current model if it's the wrong one
-+			if (whisperModel != null && currentModel != null && !currentModel.ggmlFile.equals(model.ggmlFile)) {
-+				Logger.w(LOG_TAG, "⚠️ Switching models from " + currentModel.name + " (" + currentModel.ggmlFile + ") to " + model.name + " (" + model.ggmlFile + ")");
-+				whisperModel.close();
-+				whisperModel = null;
-+				currentModel = null;
-+			}
-+
-+			// For non-English, check if multilingual model needs to be downloaded
-+			if (!ModelLoader.modelExists(ims, model)) {
-+				Logger.w(LOG_TAG, "⚠️ Multilingual model not found! Starting download...");
-+				
-+				final ModelData finalModel = model;
-+				
-+				// Start download immediately (auto-download, no dialog to avoid crash in Service context)
-+				showToast("📥 Downloading " + (language != null ? language.getName() : "multilingual") + " voice model (39MB)...", Toast.LENGTH_LONG);
-+				isDownloading.set(true);
-+				
-+				executorService.submit(() -> {
-+					try {
-+						ModelLoader.downloadModel(ims, finalModel, new ModelLoader.DownloadProgressCallback() {
-+							private int lastPercent = 0;
-+							
-+							@Override
-+							public void onProgress(int bytesDownloaded, int totalBytes) {
-+								int percent = (int) ((bytesDownloaded * 100L) / totalBytes);
-+								if (percent >= lastPercent + 10) {
-+									lastPercent = percent;
-+									Logger.d(LOG_TAG, "📥 Download progress: " + percent + "% (" + (bytesDownloaded/1024/1024) + "MB / " + (totalBytes/1024/1024) + "MB)");
-+									showToast("📥 Downloading: " + percent + "%", Toast.LENGTH_SHORT);
-+								}
-+							}
-+
-+							@Override
-+							public void onComplete() {
-+								Logger.d(LOG_TAG, "✅ Multilingual model downloaded successfully!");
-+								showToast("✅ Voice model ready! Try voice input again.", Toast.LENGTH_LONG);
-+								isDownloading.set(false);
-+								
-+								// Load the model and complete
-+								try {
-+									MappedByteBuffer modelBuffer = ModelLoader.loadModel(ims, finalModel);
-+									whisperModel = new WhisperGGML(modelBuffer, VoiceInputOps.this::onPartialResultFromModel);
-+									currentModel = finalModel;
-+									Logger.d(LOG_TAG, "✅ Successfully loaded Whisper model: " + finalModel.name);
-+									onComplete.run();
-+								} catch (IOException e) {
-+									Logger.e(LOG_TAG, "Failed to load model after download: " + e.getMessage());
-+									postError(new VoiceInputError(ims, VoiceInputError.ERROR_PROCESSING));
-+								}
-+							}
-+
-+							@Override
-+							public void onError(Exception e) {
-+								Logger.e(LOG_TAG, "❌ Failed to download multilingual model: " + e.getMessage());
-+								e.printStackTrace();
-+								isDownloading.set(false);
-+
-+								// Whistle can at least try, and detects the language itself
-+								if (WhistleEngine.isSupported() && WhistleEngine.assetExists(ims)) {
-+									showToast("❌ Download failed, using the built-in voice model", Toast.LENGTH_LONG);
-+									loadWhistleBlocking(onComplete);
-+								} else {
-+									showToast("❌ Download failed", Toast.LENGTH_LONG);
-+									postError(new VoiceInputError(ims, VoiceInputError.ERROR_PROCESSING));
-+								}
-+							}
-+						});
-+					} catch (Exception e) {
-+						Logger.e(LOG_TAG, "Download exception: " + e.getMessage());
-+						e.printStackTrace();
-+						showToast("❌ Download failed", Toast.LENGTH_SHORT);
-+						isDownloading.set(false);
-+					}
-+				});
-+				return; // Exit early, callback will handle completion
-+			}
-+			
-+			// Multilingual model exists, load it
-+			Logger.d(LOG_TAG, "Loading existing multilingual model from files...");
-+			MappedByteBuffer modelBuffer = ModelLoader.loadModel(ims, model);
-+			whisperModel = new WhisperGGML(modelBuffer, this::onPartialResultFromModel);
-+			currentModel = model;
-+			Logger.d(LOG_TAG, "✅ Successfully loaded multilingual model: " + model.name);
-+			onComplete.run();
-+
-+		} catch (IOException e) {
-+			Logger.e(LOG_TAG, "Failed to load Whisper model: " + e.getMessage());
-+			e.printStackTrace();
++			isLoadingModel = false;
++			mainHandler.post(onComplete);
++		} catch (IOException | RuntimeException e) {
++			Logger.e(LOG_TAG, "Failed to load " + model.displayName() + ": " + e.getMessage());
++			isLoadingModel = false;
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_PROCESSING));
- 		}
- 	}
- 
-+/**
-+ * Loads Whistle off the main thread, since reading and parsing the model takes a moment.
-+ * Recording starts (back on the main thread) once it is ready.
-+ */
-+private void loadWhistleAsync(Runnable onComplete) {
-+	executorService.submit(() -> loadWhistleBlocking(onComplete));
-+}
- 
--	private void listen() {
--		if (language == null) {
--			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_INVALID_LANGUAGE));
--			return;
-+private void loadWhistleBlocking(Runnable onComplete) {
-+	try {
-+		// Whistle and the multilingual Whisper model are never needed together, so free the larger one
++		}
++	}
++
++	private void closeWhisperModel() {
 +		if (whisperModel != null) {
 +			whisperModel.close();
 +			whisperModel = null;
 +			currentModel = null;
- 		}
- 
--		if (isListening()) {
--			onListeningError.accept(new VoiceInputError(ims, SpeechRecognizer.ERROR_RECOGNIZER_BUSY));
--			return;
-+		WhistleEngine.load(ims);
-+		usingWhistle = true;
-+		mainHandler.post(onComplete);
-+	} catch (IOException e) {
-+		Logger.e(LOG_TAG, "Failed to load Whistle: " + e.getMessage());
-+		postError(new VoiceInputError(ims, VoiceInputError.ERROR_PROCESSING));
++		}
 +	}
-+}
 +
 +private void showToast(String message, int duration) {
 +	mainHandler.post(() -> Toast.makeText(ims, message, duration).show());
@@ -41024,11 +40920,8 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..e70d033f567be2b11bf66d6e21f2e50d
 +					samplesRecorded++;
 +				}
 +			}
- 		}
- 
--		createGoogleRecognizer(language);
--		if (speechRecognizer == null) {
--			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_NOT_AVAILABLE));
++		}
++
 +		// Recording stopped manually by user
 +		Logger.d(LOG_TAG, "Recording stopped by user");
 +
@@ -41040,20 +40933,12 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..e70d033f567be2b11bf66d6e21f2e50d
 +
 +	public void stop() {
 +		if (!isListening) {
- 			return;
- 		}
- 
--		String locale = getLocale(language);
++			return;
++		}
++
 +		isListening = false;
 +		Logger.d(LOG_TAG, "Stopping recording");
- 
--		try {
--			listener.onBeforeStart();
--			speechRecognizer.startListening(createIntent(locale));
--			Logger.d(LOG_TAG, "SpeechRecognizer started for locale: " + locale);
--		} catch (SecurityException e) {
--			Logger.e(LOG_TAG, "SpeechRecognizer start failed due to a SecurityException. " + e.getMessage());
--			onError(new VoiceInputError(ims, VoiceInputError.ERROR_CANNOT_BIND_TO_VOICE_SERVICE));
++
 +		// Stop recording
 +		if (audioRecord != null) {
 +			try {
@@ -41061,18 +40946,13 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..e70d033f567be2b11bf66d6e21f2e50d
 +			} catch (Exception e) {
 +				Logger.e(LOG_TAG, "Error stopping AudioRecord: " + e.getMessage());
 +			}
- 		}
--	}
- 
++		}
++
 +		// Cancel recording task
 +		if (recordingTask != null && !recordingTask.isDone()) {
 +			recordingTask.cancel(true);
 +		}
- 
--	public void stop() {
--		this.language = null;
--		if (speechRecognizer != null && isListening()) {
--			speechRecognizer.stopListening();
++
 +		// Process the recorded audio
 +		if (samplesRecorded > SAMPLE_RATE) { // At least 1 second of audio
 +			processAudio();
@@ -41080,29 +40960,18 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..e70d033f567be2b11bf66d6e21f2e50d
 +			Logger.d(LOG_TAG, "Not enough audio recorded");
 +			cleanup();
 +			postResult(null);
- 		}
- 	}
- 
++		}
++	}
++
 +	private void processAudio() {
 +		if (isProcessing) {
 +			return;
 +		}
- 
--	private void destroy() {
--		this.language = null;
--
--		// We try this multiple times, because it can fail due to a bug in the Android SDK
--		// https://github.com/sspanak/tt9/issues/593
--		for (int i = 0; i < 3 && speechRecognizer != null; i++) {
++
 +		isProcessing = true;
 +		processingTask = executorService.submit(() -> {
- 			try {
--				speechRecognizer.destroy();
--			} catch (IllegalArgumentException e) {
--				if (i < 2) {
--					Logger.e(LOG_TAG, "SpeechRecognizer destroy failed. " + e.getMessage() + ". Retrying...");
--					continue;
-+				Logger.d(LOG_TAG, "Processing " + samplesRecorded + " samples with model: " + (currentModel != null ? currentModel.name : "unknown"));
++			try {
++				Logger.d(LOG_TAG, "Processing " + samplesRecorded + " samples with model: " + (usingWhistle ? "Whistle" : currentModel != null ? currentModel.displayName() : "unknown"));
 +
 +				// Get samples array
 +				audioSamples.flip();
@@ -41120,8 +40989,7 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..e70d033f567be2b11bf66d6e21f2e50d
 +				if (usingWhistle) {
 +					Logger.d(LOG_TAG, "Running Whistle with language: " + langCode);
 +					result = WhistleEngine.transcribe(samples, langCode, this::onPartialResultFromModel);
- 				} else {
--					Logger.e(LOG_TAG, "SpeechRecognizer destroy failed. " + e.getMessage() + ". Giving up and just nulling the reference.");
++				} else {
 +					// Prepare language array
 +					String[] languages = new String[]{langCode};
 +
@@ -41135,7 +41003,7 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..e70d033f567be2b11bf66d6e21f2e50d
 +						DecodingMode.GREEDY.getValue(),
 +						true // Suppress non-speech tokens
 +					);
- 				}
++				}
 +
 +				Logger.d(LOG_TAG, "Recognition result: " + result);
 +				postResult(result);
@@ -41149,16 +41017,14 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..e70d033f567be2b11bf66d6e21f2e50d
 +				postError(new VoiceInputError(ims, VoiceInputError.ERROR_PROCESSING));
 +			} finally {
 +				cleanup();
- 			}
++			}
 +		});
 +	}
 +
 +	private void cleanup() {
 +		isProcessing = false;
 +		isListening = false;
- 
--			speechRecognizer = null;
--			Logger.d(LOG_TAG, "SpeechRecognizer destroyed");
++
 +		if (audioRecord != null) {
 +			try {
 +				audioRecord.release();
@@ -41166,90 +41032,215 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..e70d033f567be2b11bf66d6e21f2e50d
 +				Logger.e(LOG_TAG, "Error releasing AudioRecord: " + e.getMessage());
 +			}
 +			audioRecord = null;
- 		}
--	}
- 
++		}
++
 +		// Keep model loaded for faster next recognition (like FUTO does)
 +		// Model is only closed when switching between different models or on destroy()
- 
--	public boolean enableOfflineMode(@NonNull Language language, boolean yes) {
--		boolean isCurrentlyAllowed = !Boolean.TRUE.equals(isOfflineModeDisabled.get(language.getId()));
++
 +		audioSamples.clear();
 +		samplesRecorded = 0;
 +	}
 +
 +	public void destroy() {
 +		cleanup();
- 
--		if (yes != isCurrentlyAllowed) {
--			isOfflineModeDisabled.put(language.getId(), !yes);
++
 +		// Close Whisper model
 +		if (whisperModel != null) {
 +			whisperModel.close();
 +			whisperModel = null;
 +			currentModel = null;
- 		}
- 
--		return isCurrentlyAllowed != yes;
++		}
++
 +		if (executorService != null && !executorService.isShutdown()) {
 +			executorService.shutdownNow();
 +		}
- 	}
- 
++	}
++
 +	private void postResult(String result) {
 +		mainHandler.post(() -> onStopListening.accept(result));
 +	}
- 
--	public void enableOfflineMode() {
--		isOfflineModeDisabled.replaceAll((i, v) -> false);
++
 +	private void postError(VoiceInputError error) {
 +		cleanup();
 +		mainHandler.post(() -> onListeningError.accept(error));
 +	}
- 
--		Logger.d(LOG_TAG, "Re-enabled offline voice input for all languages");
++
 +	// Legacy compatibility methods
 +	public boolean enableOfflineMode(@NonNull Language language, boolean yes) {
 +		// Always offline, nothing to do
 +		return false;
- 	}
- 
++	}
++
 +	public void enableOfflineMode() {
 +		// Always offline, nothing to do
 +	}
- 
++
 +	/**
 +	 * Upstream can hand over to an external voice input app (e.g. Futo Voice). This build always uses
 +	 * the built-in Whisper engine, so there is nothing to switch; the method only keeps callers compiling.
 +	 */
- 	public VoiceInputOps forceAlternativeInput(boolean yes) {
--		forceAlternativeInput = yes;
- 		return this;
++	public VoiceInputOps forceAlternativeInput(boolean yes) {
++		return this;
++	}
++
++	// Used by upstream's SpeechRecognizerSupport* and VoiceInputPickerActivity. Whisper itself does not need them.
++	public static String getLocale(@NonNull Language lang) {
+ 		return lang.getLocale().toString().replace("_", "-");
  	}
  
+-
+-	static Intent createIntent(@Nullable String locale) {
++	public static Intent createIntent(@Nullable String locale) {
+ 		Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+ 		intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+ 		intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+@@ -69,160 +484,9 @@
+ 		return intent;
+ 	}
+ 
+-
+-	private void createGoogleRecognizer(@Nullable Language language) {
+-		boolean isLanguageAllowedOffline = language != null && !Boolean.TRUE.equals(isOfflineModeDisabled.get(language.getId()));
+-
+-		if (isLanguageAllowedOffline && DeviceInfo.AT_LEAST_ANDROID_13 && recognizerSupport.isLanguageSupportedOffline(ims, language)) {
+-			Logger.d(LOG_TAG, "Creating offline SpeechRecognizer...");
+-			speechRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(ims);
+-		} else if (recognizerSupport.isGoogleOnlineRecognitionAvailable(ims)) {
+-			Logger.d(LOG_TAG, "Creating online SpeechRecognizer...");
+-			speechRecognizer = SpeechRecognizer.createSpeechRecognizer(ims);
+-		} else {
+-			Logger.d(LOG_TAG, "Cannot create SpeechRecognizer, recognition not available.");
+-			speechRecognizer = null;
+-			return;
+-		}
+-
+-		speechRecognizer.setRecognitionListener(listener);
+-	}
+-
+-
+-	public boolean isAvailable() {
+-		return
+-			recognizerSupport.isAlternativeAvailable(ims)
+-			|| recognizerSupport.isGoogleOnlineRecognitionAvailable(ims)
+-			|| recognizerSupport.isGoogleOfflineRecognitionAvailable(ims);
+-	}
+-
+-
+-	public boolean isListening() {
+-		return listener.isListening() && speechRecognizer != null;
+-	}
+-
+-
+-	public void listen(@Nullable Language language) {
+-		this.language = language;
+-		if (forceAlternativeInput || recognizerSupport.isAlternativeAvailable(ims)) {
+-			ims.startActivity(VoiceInputPickerActivity.generateShowIntent(ims));
+-		} else {
+-			recognizerSupport.setLanguage(language).checkOfflineSupport(
+-				ims,
+-				() -> new Handler(Looper.getMainLooper()).post(this::listen)
+-			);
+-		}
+-	}
+-
+-
+-	private void listen() {
+-		if (language == null) {
+-			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_INVALID_LANGUAGE));
+-			return;
+-		}
+-
+-		if (isListening()) {
+-			onListeningError.accept(new VoiceInputError(ims, SpeechRecognizer.ERROR_RECOGNIZER_BUSY));
+-			return;
+-		}
+-
+-		createGoogleRecognizer(language);
+-		if (speechRecognizer == null) {
+-			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_NOT_AVAILABLE));
+-			return;
+-		}
+-
+-		String locale = getLocale(language);
+-
+-		try {
+-			listener.onBeforeStart();
+-			speechRecognizer.startListening(createIntent(locale));
+-			Logger.d(LOG_TAG, "SpeechRecognizer started for locale: " + locale);
+-		} catch (SecurityException e) {
+-			Logger.e(LOG_TAG, "SpeechRecognizer start failed due to a SecurityException. " + e.getMessage());
+-			onError(new VoiceInputError(ims, VoiceInputError.ERROR_CANNOT_BIND_TO_VOICE_SERVICE));
+-		}
+-	}
+-
+-
+-	public void stop() {
+-		this.language = null;
+-		if (speechRecognizer != null && isListening()) {
+-			speechRecognizer.stopListening();
+-		}
+-	}
+-
+-
+-	private void destroy() {
+-		this.language = null;
+-
+-		// We try this multiple times, because it can fail due to a bug in the Android SDK
+-		// https://github.com/sspanak/tt9/issues/593
+-		for (int i = 0; i < 3 && speechRecognizer != null; i++) {
+-			try {
+-				speechRecognizer.destroy();
+-			} catch (IllegalArgumentException e) {
+-				if (i < 2) {
+-					Logger.e(LOG_TAG, "SpeechRecognizer destroy failed. " + e.getMessage() + ". Retrying...");
+-					continue;
+-				} else {
+-					Logger.e(LOG_TAG, "SpeechRecognizer destroy failed. " + e.getMessage() + ". Giving up and just nulling the reference.");
+-				}
+-			}
+-
+-			speechRecognizer = null;
+-			Logger.d(LOG_TAG, "SpeechRecognizer destroyed");
+-		}
+-	}
+-
+-
+-	public boolean enableOfflineMode(@NonNull Language language, boolean yes) {
+-		boolean isCurrentlyAllowed = !Boolean.TRUE.equals(isOfflineModeDisabled.get(language.getId()));
+-
+-		if (yes != isCurrentlyAllowed) {
+-			isOfflineModeDisabled.put(language.getId(), !yes);
+-		}
+-
+-		return isCurrentlyAllowed != yes;
+-	}
+-
+-
+-	public void enableOfflineMode() {
+-		isOfflineModeDisabled.replaceAll((i, v) -> false);
+-
+-		Logger.d(LOG_TAG, "Re-enabled offline voice input for all languages");
+-	}
+-
+-
+-	public VoiceInputOps forceAlternativeInput(boolean yes) {
+-		forceAlternativeInput = yes;
+-		return this;
+-	}
+-
 -
 -	private void onStop(@NonNull ArrayList<String> results) {
 -		destroy();
 -		onStopListening.accept(results.isEmpty() ? null : results.get(0));
-+	// Used by upstream's SpeechRecognizerSupport* and VoiceInputPickerActivity. Whisper itself does not need them.
-+	public static String getLocale(@NonNull Language lang) {
-+		return lang.getLocale().toString().replace("_", "-");
- 	}
- 
+-	}
+-
 -
 -	private void onPartial(@NonNull ArrayList<String> results) {
 -		if (!results.isEmpty()) {
 -			onPartialResult.accept(results.get(0));
-+	public static Intent createIntent(@Nullable String locale) {
-+		Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-+		intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-+		intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
-+		if (locale != null) {
-+			intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale);
- 		}
-+		return intent;
- 	}
- 
+-		}
+-	}
+-
 -
 -	private void onError(VoiceInputError error) {
 -		destroy();
@@ -41424,303 +41415,975 @@ index 0000000000000000000000000000000000000000..8b161f3a37d7c62b193be7dc76e7b0ed
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/ModelData.java b/app/src/main/java/io/github/sspanak/tt9/ml/ModelData.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..662e0ac24da9093d02b0dded2de796a984758bf4
+index 0000000000000000000000000000000000000000..a24d3510cbc797d25b4973d86fda34ac8504c263
 --- /dev/null
 +++ b/app/src/main/java/io/github/sspanak/tt9/ml/ModelData.java
-@@ -0,0 +1,18 @@
+@@ -0,0 +1,58 @@
 +package io.github.sspanak.tt9.ml;
 +
 +/**
-+ * Represents a Whisper model configuration
++ * A speech model the user can choose in Settings: the bundled Whistle engine, or a Whisper model file
++ * that is downloaded the first time it is needed.
 + */
-+public class ModelData {
-+	public final String name;
-+	public final boolean isBuiltinAsset;
-+	public final String ggmlFile;
-+	public final String digest;
++public final class ModelData {
++	public enum Group { BUILT_IN, ENGLISH, MULTILINGUAL }
 +
-+	public ModelData(String name, boolean isBuiltinAsset, String ggmlFile, String digest) {
++	/** Stored in the "pref_voice_model" setting, so it must never change for an existing model. */
++	public final String id;
++	public final Group group;
++	/** "Whistle", "Tiny", "Base" or "Small". */
++	public final String name;
++	/** Whisper size class in millions of parameters (39, 74, 244). Zero for Whistle. */
++	public final int millionParams;
++	/** The asset name of a built-in model. Otherwise the file name on FUTO's server and in the app's storage. */
++	public final String ggmlFile;
++	/** Lower-case hex SHA-256 of the whole file. */
++	public final String digest;
++	/** Expected size of the download. Used for labels, and as the size when the server does not state one. */
++	public final long sizeBytes;
++	public final boolean isBuiltinAsset;
++
++	public ModelData(String id, Group group, String name, int millionParams, String ggmlFile, String digest, long sizeBytes) {
++		this.id = id;
++		this.group = group;
 +		this.name = name;
-+		this.isBuiltinAsset = isBuiltinAsset;
++		this.millionParams = millionParams;
 +		this.ggmlFile = ggmlFile;
 +		this.digest = digest;
++		this.sizeBytes = sizeBytes;
++		this.isBuiltinAsset = group == Group.BUILT_IN;
++	}
++
++	public boolean isEnglishOnly() {
++		return group == Group.ENGLISH;
++	}
++
++	/** The size in decimal megabytes, the way file managers and download pages show it. */
++	public int sizeMb() {
++		return (int) ((sizeBytes + 500_000L) / 1_000_000L);
++	}
++
++	/** "Whistle", "English Tiny" or "Multilingual Base". */
++	public String displayName() {
++		return switch (group) {
++			case ENGLISH -> "English " + name;
++			case MULTILINGUAL -> "Multilingual " + name;
++			case BUILT_IN -> name;
++		};
++	}
++
++	@Override
++	public String toString() {
++		return id;
 +	}
 +}
-diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/ModelLoader.java b/app/src/main/java/io/github/sspanak/tt9/ml/ModelLoader.java
+diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/ModelDownloader.java b/app/src/main/java/io/github/sspanak/tt9/ml/ModelDownloader.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..0720fa02e97370e1e538a3cea61f0d632541cde9
+index 0000000000000000000000000000000000000000..961691e460725bdf47601c9d3a1ab2714806e174
 --- /dev/null
-+++ b/app/src/main/java/io/github/sspanak/tt9/ml/ModelLoader.java
-@@ -0,0 +1,225 @@
++++ b/app/src/main/java/io/github/sspanak/tt9/ml/ModelDownloader.java
+@@ -0,0 +1,158 @@
 +package io.github.sspanak.tt9.ml;
 +
 +import android.content.Context;
-+import android.content.res.AssetFileDescriptor;
++import android.os.Handler;
++import android.os.Looper;
++import android.widget.Toast;
 +
-+import java.io.File;
-+import java.io.FileInputStream;
-+import java.io.FileOutputStream;
-+import java.io.IOException;
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
++
 +import java.io.InputStream;
-+import java.net.HttpURLConnection;
-+import java.net.URL;
-+import java.nio.MappedByteBuffer;
-+import java.nio.channels.FileChannel;
 +import java.security.KeyStore;
 +import java.security.cert.Certificate;
 +import java.security.cert.CertificateFactory;
++import java.util.Arrays;
++import java.util.List;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
 +
-+import javax.net.ssl.HttpsURLConnection;
 +import javax.net.ssl.SSLContext;
++import javax.net.ssl.SSLSocketFactory;
 +import javax.net.ssl.TrustManagerFactory;
 +
 +import io.github.sspanak.tt9.R;
 +import io.github.sspanak.tt9.util.Logger;
 +
 +/**
-+ * Utilities for loading Whisper models
++ * Downloads Whisper models from FUTO's servers, one at a time, in the background. The work is done by {@link ModelDownloads};
++ * this class gives it a thread, a place to store files, the pinned certificate and the toasts.
++ *
++ * It lives as long as the app process does. If Android stops the process, the unfinished download is lost, and starting it
++ * again begins from zero.
 + */
-+public class ModelLoader {
-+	private static final String LOG_TAG = "ModelLoader";
-+	private static final String FUTO_MODEL_BASE_URL = "https://voiceinput.futo.org/VoiceInput/";
-+
-+	public interface DownloadProgressCallback {
-+		void onProgress(int bytesDownloaded, int totalBytes);
-+		void onComplete();
-+		void onError(Exception e);
-+	}
++public final class ModelDownloader {
++	private static final String LOG_TAG = ModelDownloader.class.getSimpleName();
 +
 +	/**
-+	 * Create SSL context with custom certificate
++	 * Where FUTO publishes its models. The first address is the one this app has always used. The second is where
++	 * FUTO's own keyboard downloads from today, and the first one may redirect to it.
 +	 */
-+	private static SSLContext createCustomSSLContext(Context context) throws Exception {
-+		// Load custom certificate from raw resources
-+		CertificateFactory cf = CertificateFactory.getInstance("X.509");
-+		InputStream certInputStream = context.getResources().openRawResource(R.raw.cert);
-+		Certificate cert = cf.generateCertificate(certInputStream);
-+		certInputStream.close();
++	private static final List<String> HOSTS = Arrays.asList(
++		"https://voiceinput.futo.org/VoiceInput/",
++		"https://dl.voiceinput.futo.org/VoiceInput/"
++	);
 +
-+		// Create a KeyStore with the certificate
++	private static ModelDownloads instance;
++
++	private ModelDownloader() {}
++
++
++	@NonNull
++	private static synchronized ModelDownloads get(@NonNull Context context) {
++		if (instance == null) {
++			Context app = context.getApplicationContext();
++			Handler mainThread = new Handler(Looper.getMainLooper());
++			ExecutorService worker = Executors.newSingleThreadExecutor(runnable -> {
++				Thread thread = new Thread(runnable, "tt9-model-download");
++				thread.setDaemon(true);
++				return thread;
++			});
++
++			instance = new ModelDownloads(app.getFilesDir(), HOSTS, () -> pinnedSocketFactory(app), worker, mainThread::post);
++			instance.cleanStaleParts();
++			instance.addListener((change, snapshot) -> report(app, change, snapshot));
++		}
++
++		return instance;
++	}
++
++
++	public static boolean isDownloaded(@NonNull Context context, @NonNull ModelData model) {
++		return get(context).isDownloaded(model);
++	}
++
++
++	/** Starts downloading the model unless it is already here or already on its way. Never blocks. */
++	public static boolean start(@NonNull Context context, @NonNull ModelData model) {
++		return get(context).start(model);
++	}
++
++
++	@NonNull
++	public static ModelDownloads.Snapshot snapshot(@NonNull Context context) {
++		return get(context).snapshot();
++	}
++
++
++	/** Listeners are called on the main thread. */
++	public static void addListener(@NonNull Context context, @NonNull ModelDownloads.Listener listener) {
++		get(context).addListener(listener);
++	}
++
++
++	public static void removeListener(@NonNull Context context, @NonNull ModelDownloads.Listener listener) {
++		get(context).removeListener(listener);
++	}
++
++
++	/** One short toast when a download starts, finishes or fails. Progress is shown by the settings screen. */
++	private static void report(@NonNull Context app, @NonNull ModelDownloads.Change change, @NonNull ModelDownloads.Snapshot snapshot) {
++		ModelData model = snapshot.model;
++		if (model == null) {
++			return;
++		}
++
++		switch (change) {
++			case STARTED:
++				Logger.d(LOG_TAG, "Downloading " + model.ggmlFile);
++				toast(app, app.getString(R.string.voice_model_toast_started, model.displayName(), model.sizeMb()));
++				break;
++			case DONE:
++				Logger.d(LOG_TAG, "Downloaded " + model.ggmlFile);
++				toast(app, app.getString(R.string.voice_model_toast_ready, model.displayName()));
++				break;
++			case FAILED:
++				Logger.e(LOG_TAG, "Could not download " + model.ggmlFile + ": " + snapshot.error);
++				toast(app, app.getString(R.string.voice_model_toast_failed, model.displayName(), shorten(snapshot.error)));
++				break;
++			default:
++				break;
++		}
++	}
++
++
++	private static void toast(@NonNull Context app, @NonNull String message) {
++		Toast.makeText(app, message, Toast.LENGTH_LONG).show();
++	}
++
++
++	@NonNull
++	private static String shorten(@Nullable String text) {
++		if (text == null) {
++			return "";
++		}
++		return text.length() > 140 ? text.substring(0, 137) + "..." : text;
++	}
++
++
++	/** A socket factory that trusts the certificate bundled with the app (res/raw/cert), for networks that filter the connection. */
++	@Nullable
++	private static SSLSocketFactory pinnedSocketFactory(@NonNull Context context) throws Exception {
++		Certificate certificate;
++		try (InputStream stream = context.getResources().openRawResource(R.raw.cert)) {
++			certificate = CertificateFactory.getInstance("X.509").generateCertificate(stream);
++		}
++
 +		KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
 +		keyStore.load(null, null);
-+		keyStore.setCertificateEntry("custom_cert", cert);
++		keyStore.setCertificateEntry("custom_cert", certificate);
 +
-+		// Create TrustManager with the KeyStore
-+		TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-+		tmf.init(keyStore);
++		TrustManagerFactory trustManagers = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
++		trustManagers.init(keyStore);
 +
-+		// Create SSLContext
 +		SSLContext sslContext = SSLContext.getInstance("TLS");
-+		sslContext.init(null, tmf.getTrustManagers(), null);
-+
-+		Logger.d(LOG_TAG, "Custom SSL context created with certificate");
-+		return sslContext;
++		sslContext.init(null, trustManagers.getTrustManagers(), null);
++		return sslContext.getSocketFactory();
 +	}
++}
+diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/ModelDownloads.java b/app/src/main/java/io/github/sspanak/tt9/ml/ModelDownloads.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..97e338cf1f92f767a01232aa2db71facc51220ea
+--- /dev/null
++++ b/app/src/main/java/io/github/sspanak/tt9/ml/ModelDownloads.java
+@@ -0,0 +1,214 @@
++package io.github.sspanak.tt9.ml;
++
++import java.io.File;
++import java.util.List;
++import java.util.concurrent.CopyOnWriteArrayList;
++import java.util.concurrent.Executor;
++import java.util.concurrent.atomic.AtomicBoolean;
++
++/**
++ * Looks after the one model download that may run at a time, and tells listeners how it is going.
++ *
++ * Asking for the model that is already downloading changes nothing. Asking for another model drops the unfinished one.
++ * A model counts as downloaded when its file exists, so a download that was interrupted, or failed its checksum, is simply "not downloaded".
++ *
++ * No Android classes here, so it can be tested on a PC. The worker runs the download, the notifier delivers events to listeners
++ * (the app passes the main thread's handler).
++ */
++public final class ModelDownloads {
++	public enum Status { IDLE, DOWNLOADING, FAILED }
++
++	public enum Change { STARTED, PROGRESS, DONE, FAILED }
++
++	public static final class Snapshot {
++		public final Status status;
++		/** The model being downloaded, or the one that was downloaded or failed last. Null before the first download. */
++		public final ModelData model;
++		public final long done;
++		public final long total;
++		/** Why the download failed, when the status is FAILED. */
++		public final String error;
++
++		Snapshot(Status status, ModelData model, long done, long total, String error) {
++			this.status = status;
++			this.model = model;
++			this.done = done;
++			this.total = total;
++			this.error = error;
++		}
++
++		public int percent() {
++			return total > 0 ? (int) Math.min(100L, done * 100L / total) : 0;
++		}
++	}
++
++	public interface Listener {
++		void onModelDownloadChanged(Change change, Snapshot snapshot);
++	}
++
++	private static final long PROGRESS_INTERVAL_NANOS = 250_000_000L;
++
++	private final File dir;
++	private final List<String> hosts;
++	private final ModelFetcher.PinnedTrust pinned;
++	private final Executor worker;
++	private final Executor notifier;
++	private final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
++
++	private Task current; // guarded by this
++	private Snapshot last = new Snapshot(Status.IDLE, null, 0, 0, null); // guarded by this
++
++
++	public ModelDownloads(File dir, List<String> hosts, ModelFetcher.PinnedTrust pinned, Executor worker, Executor notifier) {
++		this.dir = dir;
++		this.hosts = hosts;
++		this.pinned = pinned;
++		this.worker = worker;
++		this.notifier = notifier;
++	}
++
++
++	public void addListener(Listener listener) {
++		listeners.addIfAbsent(listener);
++	}
++
++
++	public void removeListener(Listener listener) {
++		listeners.remove(listener);
++	}
++
++
++	public synchronized Snapshot snapshot() {
++		return last;
++	}
++
++
++	public boolean isDownloaded(ModelData model) {
++		if (model.isBuiltinAsset) {
++			return true;
++		}
++
++		File file = new File(dir, model.ggmlFile);
++		return file.isFile() && file.length() > 0;
++	}
++
++
++	/** Removes the leftovers of downloads that were cut short by the app being stopped. Call it before the first download. */
++	public void cleanStaleParts() {
++		File[] parts = dir.listFiles((directory, name) -> name.endsWith(".part"));
++		if (parts != null) {
++			for (File part : parts) {
++				part.delete();
++			}
++		}
++	}
++
 +
 +	/**
-+	 * Load a model from assets or filesDir
++	 * Starts downloading the model, unless it is already on the phone or already on its way. A different model that is
++	 * still downloading is dropped.
++	 *
++	 * @return true when a download was started
 +	 */
-+	public static MappedByteBuffer loadModel(Context context, ModelData model) throws IOException {
-+		if (model.isBuiltinAsset) {
-+			return loadFromAssets(context, model.ggmlFile);
-+		} else {
-+			return loadFromFilesDir(context, model.ggmlFile);
++	public boolean start(ModelData model) {
++		if (isDownloaded(model)) {
++			return false;
 +		}
-+	}
 +
-+	private static MappedByteBuffer loadFromAssets(Context context, String fileName) throws IOException {
-+		AssetFileDescriptor fileDescriptor = context.getAssets().openFd(fileName);
-+		FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());
-+		FileChannel fileChannel = inputStream.getChannel();
-+		long startOffset = fileDescriptor.getStartOffset();
-+		long declaredLength = fileDescriptor.getDeclaredLength();
-+		MappedByteBuffer buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
-+		fileChannel.close();
-+		inputStream.close();
-+		fileDescriptor.close();
-+		return buffer;
-+	}
-+
-+	private static MappedByteBuffer loadFromFilesDir(Context context, String fileName) throws IOException {
-+		File file = new File(context.getFilesDir(), fileName);
-+		if (!file.exists()) {
-+			throw new IOException("Model file not found: " + fileName);
-+		}
-+		FileInputStream inputStream = new FileInputStream(file);
-+		FileChannel fileChannel = inputStream.getChannel();
-+		MappedByteBuffer buffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, 0, fileChannel.size());
-+		buffer.load();
-+		fileChannel.close();
-+		inputStream.close();
-+		return buffer;
-+	}
-+
-+	public static boolean modelExists(Context context, ModelData model) {
-+		if (model.isBuiltinAsset) {
-+			try {
-+				context.getAssets().openFd(model.ggmlFile).close();
-+				return true;
-+			} catch (IOException e) {
++		Task task;
++		synchronized (this) {
++			if (current != null && current.model.id.equals(model.id)) {
 +				return false;
 +			}
-+		} else {
-+			File file = new File(context.getFilesDir(), model.ggmlFile);
-+			return file.exists();
++			if (current != null) {
++				current.cancelled.set(true);
++			}
++
++			task = new Task(model);
++			current = task;
++			last = new Snapshot(Status.DOWNLOADING, model, 0, model.sizeBytes, null);
++		}
++
++		fire(Change.STARTED);
++		worker.execute(task);
++		return true;
++	}
++
++
++	private void fire(Change change) {
++		Snapshot snapshot = snapshot();
++		for (Listener listener : listeners) {
++			notifier.execute(() -> listener.onModelDownloadChanged(change, snapshot));
 +		}
 +	}
++
++
++	private void finish(Task task, Change change, String error) {
++		synchronized (this) {
++			if (current != task) {
++				return; // another model was requested meanwhile, and it reports for itself
++			}
++
++			current = null;
++			long total = Math.max(last.total, last.done);
++			last = change == Change.DONE
++				? new Snapshot(Status.IDLE, task.model, total, total, null)
++				: new Snapshot(Status.FAILED, task.model, last.done, last.total, error);
++		}
++
++		fire(change);
++	}
++
++
++	private final class Task implements Runnable {
++		final ModelData model;
++		final AtomicBoolean cancelled = new AtomicBoolean(false);
++		private long lastReport = System.nanoTime();
++
++		Task(ModelData model) {
++			this.model = model;
++		}
++
++		@Override
++		public void run() {
++			if (cancelled.get()) {
++				return;
++			}
++
++			boolean reported = false;
++			try {
++				ModelFetcher.fetch(model, dir, hosts, pinned, this::onProgress, cancelled);
++				reported = true;
++				finish(this, Change.DONE, null);
++			} catch (ModelFetcher.Cancelled e) {
++				reported = true; // replaced by another download
++			} catch (Exception e) {
++				reported = true;
++				String message = e.getMessage();
++				finish(this, Change.FAILED, message != null && !message.isEmpty() ? message : e.getClass().getSimpleName());
++			} finally {
++				if (!reported) {
++					finish(this, Change.FAILED, "the download stopped unexpectedly");
++				}
++			}
++		}
++
++		private void onProgress(long done, long total) {
++			long now = System.nanoTime();
++			boolean complete = total > 0 && done >= total;
++			if (!complete && now - lastReport < PROGRESS_INTERVAL_NANOS) {
++				return;
++			}
++			lastReport = now;
++
++			synchronized (ModelDownloads.this) {
++				if (current != this) {
++					return;
++				}
++				last = new Snapshot(Status.DOWNLOADING, model, done, total, null);
++			}
++
++			fire(Change.PROGRESS);
++		}
++	}
++}
+diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/ModelFetcher.java b/app/src/main/java/io/github/sspanak/tt9/ml/ModelFetcher.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..6fd23919d368509789272bfe1d6f29b0ba12d1a1
+--- /dev/null
++++ b/app/src/main/java/io/github/sspanak/tt9/ml/ModelFetcher.java
+@@ -0,0 +1,237 @@
++package io.github.sspanak.tt9.ml;
++
++import java.io.File;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.io.InputStream;
++import java.net.HttpURLConnection;
++import java.net.URL;
++import java.security.MessageDigest;
++import java.security.NoSuchAlgorithmException;
++import java.util.List;
++import java.util.concurrent.atomic.AtomicBoolean;
++
++import javax.net.ssl.HttpsURLConnection;
++import javax.net.ssl.SSLSocketFactory;
++
++/**
++ * Downloads one model file and proves it is the right one: the bytes are hashed while they arrive, and the file only gets its
++ * final name once the SHA-256 matches the one in the catalog. A wrong, truncated or replaced file never reaches the model loader.
++ *
++ * No Android classes here, so it can be tested on a PC.
++ */
++public final class ModelFetcher {
++	public interface Progress {
++		void onProgress(long done, long total);
++	}
++
++	/** Supplies the extra certificate that is tried first on https addresses. May return null when there is none. */
++	public interface PinnedTrust {
++		SSLSocketFactory socketFactory() throws Exception;
++	}
++
++	/** The download was cancelled. Nothing is left on disk. */
++	public static final class Cancelled extends IOException {
++		private static final long serialVersionUID = 1L;
++
++		Cancelled() {
++			super("Download cancelled");
++		}
++	}
++
++	/** There is no point trying another address, the next one needs the same space. */
++	public static final class NotEnoughSpace extends IOException {
++		private static final long serialVersionUID = 1L;
++
++		NotEnoughSpace(String message) {
++			super(message);
++		}
++	}
++
++	static final int CONNECT_TIMEOUT_MS = 15_000;
++	static final int READ_TIMEOUT_MS = 30_000;
++	static final long SPACE_MARGIN_BYTES = 32L * 1024 * 1024;
++
++	private ModelFetcher() {}
++
 +
 +	/**
-+	 * Download a model from FUTO's server with custom certificate support
-+	 * This runs synchronously - call from a background thread
++	 * Downloads the model into the given directory, trying each base address in turn. On https addresses the pinned certificate
++	 * is tried first and the phone's own trusted certificates second, as the app has always done.
++	 *
++	 * @param baseUrls addresses ending with "/", the file name is appended
++	 * @param pinned   may be null
++	 * @return the finished file
++	 * @throws Cancelled      when the flag was raised
++	 * @throws NotEnoughSpace when the phone has no room for the file
++	 * @throws IOException    when no address delivered a file with the expected checksum; the message says what went wrong with each
 +	 */
-+	public static void downloadModel(Context context, ModelData model, DownloadProgressCallback callback) {
-+		if (model.isBuiltinAsset) {
-+			Logger.d(LOG_TAG, "Model is built-in, no download needed");
-+			if (callback != null) callback.onComplete();
-+			return;
++	public static File fetch(
++		ModelData model,
++		File dir,
++		List<String> baseUrls,
++		PinnedTrust pinned,
++		Progress progress,
++		AtomicBoolean cancelled
++	) throws IOException {
++		if (!dir.isDirectory() && !dir.mkdirs()) {
++			throw new IOException("Cannot create " + dir);
 +		}
 +
-+		File outputFile = new File(context.getFilesDir(), model.ggmlFile);
-+		if (outputFile.exists()) {
-+			Logger.d(LOG_TAG, "Model already exists: " + model.ggmlFile);
-+			if (callback != null) callback.onComplete();
-+			return;
-+		}
++		File part = new File(dir, model.ggmlFile + ".part");
++		File target = new File(dir, model.ggmlFile);
++		StringBuilder failures = new StringBuilder();
 +
-+		// Try with custom certificate first (for filtered networks)
-+		Logger.d(LOG_TAG, "Attempting download with custom certificate...");
-+		try {
-+			downloadWithCertificate(context, model, callback, true);
-+			return; // Success!
-+		} catch (Exception e) {
-+			Logger.w(LOG_TAG, "Download with custom certificate failed: " + e.getMessage());
-+		}
++		for (String base : baseUrls) {
++			String url = base + model.ggmlFile;
++			boolean https = url.startsWith("https:");
++			String failure = "no connection attempt was made";
 +
-+		// Fallback to default certificate (for normal networks)
-+		Logger.d(LOG_TAG, "Retrying download with default certificate...");
-+		try {
-+			downloadWithCertificate(context, model, callback, false);
-+		} catch (Exception e) {
-+			Logger.e(LOG_TAG, "Download failed with both certificates: " + e.getMessage());
-+			if (callback != null) {
-+				callback.onError(e);
-+			}
-+		}
-+	}
++			for (int pass = 0; pass < 2; pass++) {
++				SSLSocketFactory factory = null;
++				if (pass == 0) {
++					if (!https || pinned == null) {
++						continue;
++					}
++					try {
++						factory = pinned.socketFactory();
++					} catch (Exception ignored) {
++						// no usable pinned certificate, the system's certificates are tried next
++					}
++					if (factory == null) {
++						continue;
++					}
++				}
 +
-+	private static void downloadWithCertificate(Context context, ModelData model, DownloadProgressCallback callback, boolean useCustomCert) throws Exception {
-+		File outputFile = new File(context.getFilesDir(), model.ggmlFile);
-+		File tempFile = new File(context.getCacheDir(), model.ggmlFile + ".download");
-+		HttpURLConnection connection = null;
++				if (cancelled.get()) {
++					part.delete();
++					throw new Cancelled();
++				}
 +
-+		try {
-+			String downloadUrl = FUTO_MODEL_BASE_URL + model.ggmlFile;
-+			Logger.d(LOG_TAG, "Downloading from: " + downloadUrl);
-+
-+			URL url = new URL(downloadUrl);
-+			connection = (HttpURLConnection) url.openConnection();
-+			
-+			// Use custom or default SSL certificate
-+			if (connection instanceof HttpsURLConnection && useCustomCert) {
-+				SSLContext sslContext = createCustomSSLContext(context);
-+				((HttpsURLConnection) connection).setSSLSocketFactory(sslContext.getSocketFactory());
-+				Logger.d(LOG_TAG, "Using custom SSL certificate");
-+			} else {
-+				Logger.d(LOG_TAG, "Using default SSL certificate");
-+			}
-+			
-+			connection.setConnectTimeout(30000);
-+			connection.setReadTimeout(30000);
-+			connection.connect();
-+
-+			if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) {
-+				throw new IOException("HTTP error: " + connection.getResponseCode());
-+			}
-+
-+			int fileSize = connection.getContentLength();
-+			InputStream input = connection.getInputStream();
-+			FileOutputStream output = new FileOutputStream(tempFile);
-+
-+			byte[] buffer = new byte[128 * 1024]; // 128KB buffer
-+			int bytesDownloaded = 0;
-+			int bytesRead;
-+
-+			while ((bytesRead = input.read(buffer)) != -1) {
-+				output.write(buffer, 0, bytesRead);
-+				bytesDownloaded += bytesRead;
-+
-+				if (callback != null && fileSize > 0) {
-+					callback.onProgress(bytesDownloaded, fileSize);
++				try {
++					download(url, factory, model, dir, part, progress, cancelled);
++					if (!part.renameTo(target)) {
++						throw new IOException("could not move the finished download into place");
++					}
++					return target;
++				} catch (Cancelled | NotEnoughSpace e) {
++					part.delete();
++					throw e;
++				} catch (IOException e) {
++					part.delete();
++					failure = describe(e);
 +				}
 +			}
 +
-+			output.flush();
-+			output.close();
-+			input.close();
-+
-+			// Move temp file to final location
-+			if (!tempFile.renameTo(outputFile)) {
-+				throw new IOException("Failed to move downloaded file to final location");
++			if (failures.length() > 0) {
++				failures.append("; ");
 +			}
-+
-+			Logger.d(LOG_TAG, "Model downloaded successfully: " + model.ggmlFile);
-+			if (callback != null) callback.onComplete();
-+
-+		} finally {
-+			if (connection != null) {
-+				connection.disconnect();
-+			}
-+			// Clean up temp file on error
-+			if (!outputFile.exists() && tempFile.exists()) {
-+				tempFile.delete();
-+			}
++			failures.append(hostOf(url)).append(": ").append(failure);
 +		}
++
++		throw new IOException(failures.length() > 0 ? failures.toString() : "no download address");
++	}
++
++
++	private static void download(
++		String url,
++		SSLSocketFactory factory,
++		ModelData model,
++		File dir,
++		File part,
++		Progress progress,
++		AtomicBoolean cancelled
++	) throws IOException {
++		HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
++
++		try {
++			if (factory != null && connection instanceof HttpsURLConnection) {
++				((HttpsURLConnection) connection).setSSLSocketFactory(factory);
++			}
++			connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
++			connection.setReadTimeout(READ_TIMEOUT_MS);
++			connection.setRequestProperty("Accept-Encoding", "identity"); // size and checksum are those of the file as it is
++
++			int status = connection.getResponseCode();
++			if (status != HttpURLConnection.HTTP_OK) {
++				throw new IOException("HTTP " + status);
++			}
++
++			long announced = connection.getContentLengthLong();
++			long total = announced > 0 ? announced : model.sizeBytes;
++			requireSpace(dir, total);
++
++			MessageDigest sha256 = newSha256();
++			byte[] buffer = new byte[64 * 1024];
++			long done = 0;
++
++			try (InputStream in = connection.getInputStream(); FileOutputStream out = new FileOutputStream(part)) {
++				int read;
++				while ((read = in.read(buffer)) != -1) {
++					if (cancelled.get()) {
++						throw new Cancelled();
++					}
++					out.write(buffer, 0, read);
++					sha256.update(buffer, 0, read);
++					done += read;
++					progress.onProgress(done, total);
++				}
++			}
++
++			if (announced > 0 && done != announced) {
++				throw new IOException("incomplete download (" + done + " of " + announced + " bytes)");
++			}
++
++			String actual = toHex(sha256.digest());
++			if (!actual.equalsIgnoreCase(model.digest)) {
++				throw new IOException("checksum mismatch, the file is not the expected model");
++			}
++		} finally {
++			connection.disconnect();
++		}
++	}
++
++
++	private static void requireSpace(File dir, long fileSize) throws NotEnoughSpace {
++		long needed = fileSize + SPACE_MARGIN_BYTES;
++		if (dir.getUsableSpace() < needed) {
++			throw new NotEnoughSpace("not enough free storage, about " + ((needed + 999_999L) / 1_000_000L) + " MB are needed");
++		}
++	}
++
++
++	private static MessageDigest newSha256() throws IOException {
++		try {
++			return MessageDigest.getInstance("SHA-256");
++		} catch (NoSuchAlgorithmException e) {
++			throw new IOException("SHA-256 is not available", e);
++		}
++	}
++
++
++	private static String toHex(byte[] bytes) {
++		char[] digits = "0123456789abcdef".toCharArray();
++		char[] hex = new char[bytes.length * 2];
++		for (int i = 0; i < bytes.length; i++) {
++			hex[i * 2] = digits[(bytes[i] >> 4) & 0xF];
++			hex[i * 2 + 1] = digits[bytes[i] & 0xF];
++		}
++		return new String(hex);
++	}
++
++
++	private static String describe(Exception e) {
++		String message = e.getMessage();
++		return message != null && !message.isEmpty() ? message : e.getClass().getSimpleName();
++	}
++
++
++	private static String hostOf(String url) {
++		try {
++			String host = new URL(url).getHost();
++			return host != null && !host.isEmpty() ? host : url;
++		} catch (IOException e) {
++			return url;
++		}
++	}
++}
+diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/ModelLoader.java b/app/src/main/java/io/github/sspanak/tt9/ml/ModelLoader.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..5781b4a8822786714af7fcda42269da8adcfb9be
+--- /dev/null
++++ b/app/src/main/java/io/github/sspanak/tt9/ml/ModelLoader.java
+@@ -0,0 +1,42 @@
++package io.github.sspanak.tt9.ml;
++
++import android.content.Context;
++
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.IOException;
++import java.nio.MappedByteBuffer;
++import java.nio.channels.FileChannel;
++
++/**
++ * Loads Whisper models from the app's storage. Downloading them is the job of {@link ModelDownloader}.
++ */
++public final class ModelLoader {
++	private ModelLoader() {}
++
++
++	/** Maps a downloaded model into memory. Blocks while the file is read, so keep it off the main thread. */
++	public static MappedByteBuffer loadModel(Context context, ModelData model) throws IOException {
++		File file = new File(context.getFilesDir(), model.ggmlFile);
++		if (!file.isFile()) {
++			throw new IOException("Model file not found: " + model.ggmlFile);
++		}
++
++		try (FileInputStream stream = new FileInputStream(file); FileChannel channel = stream.getChannel()) {
++			MappedByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
++			buffer.load();
++			return buffer;
++		}
++	}
++
++
++	/** True when a downloaded model is complete on the phone, or when a built-in model is in the APK. */
++	public static boolean modelExists(Context context, ModelData model) {
++		if (model.isBuiltinAsset) {
++			return WhistleEngine.assetExists(context);
++		}
++
++		File file = new File(context.getFilesDir(), model.ggmlFile);
++		return file.isFile() && file.length() > 0;
++	}
++}
+diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/VoiceModelChooser.java b/app/src/main/java/io/github/sspanak/tt9/ml/VoiceModelChooser.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..686282449f7c205f3fa9e1fa325eaf8b7415428b
+--- /dev/null
++++ b/app/src/main/java/io/github/sspanak/tt9/ml/VoiceModelChooser.java
+@@ -0,0 +1,106 @@
++package io.github.sspanak.tt9.ml;
++
++import java.util.function.Predicate;
++
++/**
++ * Decides which speech model handles a dictation, from the model chosen in Settings and the language being dictated.
++ * Plain Java on purpose, so the rules have tests that run on a PC.
++ *
++ * <pre>
++ * Whistle chosen         Whistle for the languages it knows, Multilingual Tiny for the rest.
++ * English model chosen   That model for English. Any other language: Whistle if it knows it, else Multilingual Tiny.
++ * Multilingual chosen    That model, for every language.
++ * </pre>
++ *
++ * If Whistle is chosen but cannot run on this phone, English uses English Tiny and the other languages Multilingual Tiny.
++ * A Whisper model that is not downloaded yet is fetched in the background, and Whistle covers for it where it can.
++ * Where it cannot, there is nothing to run yet, and the caller should tell the user to try again when the download is done.
++ */
++public final class VoiceModelChooser {
++	private VoiceModelChooser() {}
++
++	public static final class Choice {
++		/** What to run right now, or null when the dictation has to wait for a download. */
++		public final ModelData run;
++		/** What to start (or keep) downloading, or null when nothing is missing. */
++		public final ModelData download;
++		/** What the setting and the language call for, downloaded or not. */
++		public final ModelData wanted;
++		/** Whistle was chosen and knows the language, but this phone cannot run it. */
++		public final boolean whistleUnavailable;
++		/** Whistle runs only because the wanted model is still being downloaded. */
++		public final boolean whistleStandsIn;
++
++		Choice(ModelData run, ModelData download, ModelData wanted, boolean whistleUnavailable, boolean whistleStandsIn) {
++			this.run = run;
++			this.download = download;
++			this.wanted = wanted;
++			this.whistleUnavailable = whistleUnavailable;
++			this.whistleStandsIn = whistleStandsIn;
++		}
++
++		@Override
++		public String toString() {
++			return "run=" + (run != null ? run.id : "wait")
++				+ " wanted=" + wanted.id
++				+ (download != null ? " download=" + download.id : "")
++				+ (whistleUnavailable ? " whistleUnavailable" : "")
++				+ (whistleStandsIn ? " whistleStandsIn" : "");
++		}
++	}
++
++	/**
++	 * @param selected           the model chosen in Settings, null for the default
++	 * @param language           2-letter, lower-case code as returned by WhisperModels.mapLanguageCode()
++	 * @param whistleKnowsLanguage whether Whistle can transcribe this language
++	 * @param whistleRuns        whether Whistle can run on this phone (CPU supported, library loaded, model present)
++	 * @param isDownloaded       tells whether a Whisper model file is already on the phone
++	 */
++	public static Choice choose(
++		ModelData selected,
++		String language,
++		boolean whistleKnowsLanguage,
++		boolean whistleRuns,
++		Predicate<ModelData> isDownloaded
++	) {
++		ModelData chosen = selected != null ? selected : WhisperModels.WHISTLE;
++		boolean whistleUsable = whistleKnowsLanguage && whistleRuns;
++		boolean whistleUnavailable = false;
++		ModelData wanted;
++
++		switch (chosen.group) {
++			case BUILT_IN:
++				if (!whistleKnowsLanguage) {
++					wanted = WhisperModels.MULTILINGUAL_TINY;
++				} else if (whistleRuns) {
++					wanted = WhisperModels.WHISTLE;
++				} else {
++					whistleUnavailable = true;
++					wanted = "en".equals(language) ? WhisperModels.ENGLISH_TINY : WhisperModels.MULTILINGUAL_TINY;
++				}
++				break;
++
++			case ENGLISH:
++				if ("en".equals(language)) {
++					wanted = chosen;
++				} else {
++					wanted = whistleUsable ? WhisperModels.WHISTLE : WhisperModels.MULTILINGUAL_TINY;
++				}
++				break;
++
++			default:
++				wanted = chosen;
++				break;
++		}
++
++		if (wanted.isBuiltinAsset || isDownloaded.test(wanted)) {
++			return new Choice(wanted, null, wanted, whistleUnavailable, false);
++		}
++
++		if (whistleUsable) {
++			return new Choice(WhisperModels.WHISTLE, wanted, wanted, whistleUnavailable, true);
++		}
++
++		return new Choice(null, wanted, wanted, whistleUnavailable, false);
++	}
++}
+diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/VoiceModelSetting.java b/app/src/main/java/io/github/sspanak/tt9/ml/VoiceModelSetting.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..c52027cf03189dfbfbf793804d65a4e2bd7bf7a4
+--- /dev/null
++++ b/app/src/main/java/io/github/sspanak/tt9/ml/VoiceModelSetting.java
+@@ -0,0 +1,23 @@
++package io.github.sspanak.tt9.ml;
++
++import android.content.Context;
++
++import androidx.annotation.NonNull;
++import androidx.preference.PreferenceManager;
++
++/**
++ * The "Voice input model" setting. The dropdown on the settings screen writes it, and voice input reads it.
++ */
++public final class VoiceModelSetting {
++	public static final String KEY = "pref_voice_model";
++
++	private VoiceModelSetting() {}
++
++
++	/** The chosen model. Whistle until the user picks another one, and also when the stored value is not a known model. */
++	@NonNull
++	public static ModelData get(@NonNull Context context) {
++		String id = PreferenceManager.getDefaultSharedPreferences(context).getString(KEY, WhisperModels.WHISTLE.id);
++		return WhisperModels.findOrDefault(id);
 +	}
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/WhisperModels.java b/app/src/main/java/io/github/sspanak/tt9/ml/WhisperModels.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c55a126a373c9c5e7a7f48f17106867199e222d1
+index 0000000000000000000000000000000000000000..81e1bdeac27b645fd61b39c3b3fab013fe56336b
 --- /dev/null
 +++ b/app/src/main/java/io/github/sspanak/tt9/ml/WhisperModels.java
-@@ -0,0 +1,96 @@
+@@ -0,0 +1,143 @@
 +package io.github.sspanak.tt9.ml;
 +
-+/**
-+ * Available models for offline speech recognition: Whistle (bundled) and Whisper multilingual (downloaded)
-+ */
-+public class WhisperModels {
++import io.github.sspanak.tt9.ml.ModelData.Group;
 +
-+	/**
-+	 * Whistle ships inside the APK and handles English, German, French, Spanish, Italian, Dutch and Polish.
-+	 * See WhistleEngine for the language list; the file is fetched by CI from Cactus Compute's release.
-+	 */
++/**
++ * Every speech model the app offers, in the order Settings lists them: Whistle, then the English Whisper models,
++ * then the multilingual Whisper models.
++ *
++ * Whistle ships inside the APK. The Whisper files are FUTO's ACFT models (https://github.com/futo-org/whisper-acft),
++ * which are fine-tuned to run with a short audio context, so a short dictation is fast. They are downloaded the first
++ * time they are needed, and the app refuses any file whose SHA-256 differs from the one below.
++ */
++public final class WhisperModels {
++	/** The ".not.tflite" suffix keeps Android from compressing the asset inside the APK. */
++	public static final String WHISTLE_ASSET = "whistle.cact.not.tflite";
++
++	/** Bundled in the APK. English, German, French, Spanish, Italian, Dutch and Polish. See WhistleEngine. */
 +	public static final ModelData WHISTLE = new ModelData(
-+		"Whistle (7 languages)",
-+		true,
-+		WhistleEngine.ASSET_NAME,
-+		"b6e02f048568ac5d01a2042556c658061e699acbc0aa2a1439f52f3d461dffeb"
++		"whistle", Group.BUILT_IN, "Whistle", 0,
++		WHISTLE_ASSET, "b6e02f048568ac5d01a2042556c658061e699acbc0aa2a1439f52f3d461dffeb", 0L
++	);
++
++	public static final ModelData ENGLISH_TINY = new ModelData(
++		"en-tiny", Group.ENGLISH, "Tiny", 39,
++		"tiny_en_acft_q8_0.bin", "4b5480aa1b14a7efc5b578ef176510970a898049671c3cd237285b3e3f6bfbfc", 43_550_795L
++	);
++
++	public static final ModelData ENGLISH_BASE = new ModelData(
++		"en-base", Group.ENGLISH, "Base", 74,
++		"base_en_acft_q8_0.bin", "e9b4b7b81b8a28769e8aa9962aa39bb9f21b622cf6a63982e93f065ed5caf1c8", 81_781_811L
++	);
++
++	public static final ModelData ENGLISH_SMALL = new ModelData(
++		"en-small", Group.ENGLISH, "Small", 244,
++		"small_en_acft_q8_0.bin", "58fbe949992dafed917590d58bc12ca577b08b9957f0b3e0d7ee71b64bed3aa8", 264_477_561L
++	);
++
++	public static final ModelData MULTILINGUAL_TINY = new ModelData(
++		"multi-tiny", Group.MULTILINGUAL, "Tiny", 39,
++		"tiny_acft_q8_0.bin", "07aa4d514144deacf5ffec5cacb36c93dee272fda9e64ac33a801f8cd5cbd953", 43_537_433L
++	);
++
++	public static final ModelData MULTILINGUAL_BASE = new ModelData(
++		"multi-base", Group.MULTILINGUAL, "Base", 74,
++		"base_acft_q8_0.bin", "e44f352c9aa2c3609dece20c733c4ad4a75c28cd9ab07d005383df55fa96efc4", 81_768_585L
 +	);
 +
 +	public static final ModelData MULTILINGUAL_SMALL = new ModelData(
-+		"Multilingual-39 (74+ languages)",
-+		false,
-+		"tiny_acft_q8_0.bin",
-+		"07aa4d514144deacf5ffec5cacb36c93dee272fda9e64ac33a801f8cd5cbd953"
++		"multi-small", Group.MULTILINGUAL, "Small", 244,
++		"small_acft_q8_0.bin", "15ef255465a6dc582ecf1ec651a4618c7ee2c18c05570bbe46493d248d465ac4", 264_464_607L
 +	);
 +
-+	public static final ModelData[] MULTILINGUAL_MODELS = {
-+		MULTILINGUAL_SMALL
++	/** In the order Settings shows them. */
++	public static final ModelData[] ALL = {
++		WHISTLE,
++		ENGLISH_TINY, ENGLISH_BASE, ENGLISH_SMALL,
++		MULTILINGUAL_TINY, MULTILINGUAL_BASE, MULTILINGUAL_SMALL
 +	};
 +
++	private WhisperModels() {}
++
++	/** The model with the given id, or null. */
++	public static ModelData find(String id) {
++		for (ModelData model : ALL) {
++			if (model.id.equals(id)) {
++				return model;
++			}
++		}
++		return null;
++	}
++
++	/** The model with the given id, or Whistle when there is no such model (a missing or outdated setting). */
++	public static ModelData findOrDefault(String id) {
++		ModelData model = find(id);
++		return model != null ? model : WHISTLE;
++	}
++
 +	/**
-+	 * Language codes supported by the multilingual model
-+	 * All 74+ languages from Whisper training dataset (excluding English - uses dedicated model)
++	 * Language codes supported by the multilingual Whisper models: all 74+ languages of Whisper's training data.
 +	 */
 +	public static final String[] SUPPORTED_LANGUAGES = {
 +		// High-resource languages (>1000 hours)
 +		"zh", "de", "es", "ru", "fr", "pt", "ko", "ja", "tr", "pl", "it", "sv", "nl", "ca", "fi", "id", "in",
 +		// Medium-resource languages (100-1000 hours)
-+		"ar", "uk", "vi", "he", "el", "da", "ms", "hu", "ro", "no", "nb", "nn", "th", "cs", "ta", "ur", 
++		"ar", "uk", "vi", "he", "el", "da", "ms", "hu", "ro", "no", "nb", "nn", "th", "cs", "ta", "ur",
 +		// Lower-resource languages (10-100 hours)
 +		"hr", "sk", "bg", "tl", "cy", "lt", "lv", "az", "et", "sl", "sr", "fa", "eu", "is", "mk", "hy", "kk", "hi", "bs", "gl",
 +		// Low-resource languages (<10 hours)
@@ -41739,7 +42402,7 @@ index 0000000000000000000000000000000000000000..c55a126a373c9c5e7a7f48f171068671
 +			languageCode = languageCode.substring(0, 2);
 +		}
 +		languageCode = languageCode.toLowerCase();
-+		
++
 +		// Map deprecated codes to current ISO 639-1 codes
 +		if ("in".equals(languageCode)) {
 +			return "id"; // Indonesian: 'in' (old) -> 'id' (current)
@@ -41762,12 +42425,12 @@ index 0000000000000000000000000000000000000000..c55a126a373c9c5e7a7f48f171068671
 +		if ("zg".equals(languageCode) || "zgh".equals(languageCode)) {
 +			return "ar"; // Tamazight -> Arabic (geographically close, not natively supported)
 +		}
-+		
++
 +		return languageCode;
 +	}
 +
 +	/**
-+	 * Check if a language is supported by the multilingual model
++	 * Check if a language is supported by the multilingual models
 +	 */
 +	public static boolean isLanguageSupported(String languageCode) {
 +		String mapped = mapLanguageCode(languageCode);
@@ -41781,7 +42444,7 @@ index 0000000000000000000000000000000000000000..c55a126a373c9c5e7a7f48f171068671
 +}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ml/WhistleEngine.java b/app/src/main/java/io/github/sspanak/tt9/ml/WhistleEngine.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..5101654963a999ddaf0a752791554779e7fdd75f
+index 0000000000000000000000000000000000000000..0c783fe5ef4691b74aac6f90fcf3dea2a99bd852
 --- /dev/null
 +++ b/app/src/main/java/io/github/sspanak/tt9/ml/WhistleEngine.java
 @@ -0,0 +1,183 @@
@@ -41811,13 +42474,13 @@ index 0000000000000000000000000000000000000000..5101654963a999ddaf0a752791554779
 +
 +/**
 + * Whistle: a 16.9 MB on-device speech recogniser for English, German, French, Spanish, Italian,
-+ * Dutch and Polish. Languages outside that list use the multilingual Whisper model instead.
++ * Dutch and Polish. Other languages need one of the Whisper models, which are downloaded when first used.
 + */
 +public final class WhistleEngine {
 +	private static final String LOG_TAG = WhistleEngine.class.getSimpleName();
 +
-+	/** The ".not.tflite" suffix keeps Android from compressing the asset, as with the other bundled model. */
-+	public static final String ASSET_NAME = "whistle.cact.not.tflite";
++	/** The ".not.tflite" suffix keeps Android from compressing the asset inside the APK. */
++	public static final String ASSET_NAME = WhisperModels.WHISTLE_ASSET;
 +
 +	private static final List<String> LANGUAGES = Arrays.asList("en", "de", "fr", "es", "it", "nl", "pl");
 +
@@ -41968,6 +42631,232 @@ index 0000000000000000000000000000000000000000..5101654963a999ddaf0a752791554779
 +		}
 +	}
 +}
+diff --git a/app/src/main/java/io/github/sspanak/tt9/preferences/screens/voice/DropDownVoiceModel.java b/app/src/main/java/io/github/sspanak/tt9/preferences/screens/voice/DropDownVoiceModel.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..880470ec4460cf99229c399a8b8e00b3675357c7
+--- /dev/null
++++ b/app/src/main/java/io/github/sspanak/tt9/preferences/screens/voice/DropDownVoiceModel.java
+@@ -0,0 +1,100 @@
++package io.github.sspanak.tt9.preferences.screens.voice;
++
++import android.content.Context;
++import android.util.AttributeSet;
++
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
++import androidx.preference.Preference;
++
++import io.github.sspanak.tt9.R;
++import io.github.sspanak.tt9.ml.ModelData;
++import io.github.sspanak.tt9.ml.ModelDownloader;
++import io.github.sspanak.tt9.ml.VoiceModelSetting;
++import io.github.sspanak.tt9.ml.WhisperModels;
++import io.github.sspanak.tt9.preferences.custom.EnhancedDropDownPreference;
++import io.github.sspanak.tt9.preferences.settings.SettingsStore;
++
++/**
++ * The "Voice input model" dropdown: Whistle first, then the English models, then the multilingual ones.
++ * Choosing a model that is not on the phone yet starts downloading it.
++ */
++public class DropDownVoiceModel extends EnhancedDropDownPreference {
++	public static final String NAME = VoiceModelSetting.KEY;
++
++	public DropDownVoiceModel(@NonNull Context context) { super(context); }
++	public DropDownVoiceModel(@NonNull Context context, @Nullable AttributeSet attrs) { super(context, attrs); }
++	public DropDownVoiceModel(@NonNull Context context, @Nullable AttributeSet attrs, int defStyle) { super(context, attrs, defStyle); }
++	public DropDownVoiceModel(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr, int defStyleRes) { super(context, attrs, defStyleAttr, defStyleRes); }
++
++
++	@Override
++	protected void init(@NonNull Context c) {
++		super.init(c);
++		fillOptions(c);
++	}
++
++
++	@Override
++	public void onAttached() {
++		super.onAttached();
++
++		// The stored value is only known once the preference is attached. Anything unknown means the default.
++		if (!values.containsKey(getValue())) {
++			setValue(VoiceModelSetting.get(getContext()).id);
++		}
++		preview();
++	}
++
++
++	@Override
++	protected boolean onChange(Preference preference, Object newKey) {
++		ModelData model = WhisperModels.find(String.valueOf(newKey));
++		if (model == null) {
++			return false;
++		}
++
++		// Does nothing for Whistle, or for a model that is already on the phone.
++		ModelDownloader.start(getContext(), model);
++		return true;
++	}
++
++
++	@Override
++	public EnhancedDropDownPreference populate(@NonNull SettingsStore settings) {
++		fillOptions(getContext());
++		preview();
++		return this;
++	}
++
++
++	private void fillOptions(@NonNull Context c) {
++		values.clear();
++		for (ModelData model : WhisperModels.ALL) {
++			add(model.id, label(c, model));
++		}
++		commitOptions();
++	}
++
++
++	@NonNull
++	private static String label(@NonNull Context c, @NonNull ModelData model) {
++		return switch (model.group) {
++			case BUILT_IN -> c.getString(R.string.voice_model_entry_whistle);
++			case ENGLISH -> c.getString(R.string.voice_model_entry_english, model.name, model.sizeMb());
++			case MULTILINGUAL -> c.getString(R.string.voice_model_entry_multilingual, model.name, model.sizeMb());
++		};
++	}
++
++
++	@Override
++	protected String getName() {
++		return NAME;
++	}
++
++
++	@Override
++	protected int getDisplayTitle() {
++		return R.string.pref_voice_model;
++	}
++}
+diff --git a/app/src/main/java/io/github/sspanak/tt9/preferences/screens/voice/PreferenceVoiceModelStatus.java b/app/src/main/java/io/github/sspanak/tt9/preferences/screens/voice/PreferenceVoiceModelStatus.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..0c00cfc64ead05a039709e9cf1564f2aea8660ce
+--- /dev/null
++++ b/app/src/main/java/io/github/sspanak/tt9/preferences/screens/voice/PreferenceVoiceModelStatus.java
+@@ -0,0 +1,114 @@
++package io.github.sspanak.tt9.preferences.screens.voice;
++
++import android.content.Context;
++import android.content.SharedPreferences;
++import android.util.AttributeSet;
++
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
++import androidx.preference.Preference;
++import androidx.preference.PreferenceManager;
++
++import io.github.sspanak.tt9.R;
++import io.github.sspanak.tt9.ml.ModelData;
++import io.github.sspanak.tt9.ml.ModelDownloader;
++import io.github.sspanak.tt9.ml.ModelDownloads;
++import io.github.sspanak.tt9.ml.VoiceModelSetting;
++import io.github.sspanak.tt9.ml.WhistleEngine;
++
++/**
++ * Shows what state the chosen voice model is in: built in, downloaded, downloading (live) or missing. Tapping it
++ * (re)starts the download when the model is not on the phone.
++ */
++public class PreferenceVoiceModelStatus extends Preference implements ModelDownloads.Listener, SharedPreferences.OnSharedPreferenceChangeListener {
++	public static final String NAME = "pref_voice_model_status";
++
++	public PreferenceVoiceModelStatus(@NonNull Context context) { super(context); init(); }
++	public PreferenceVoiceModelStatus(@NonNull Context context, @Nullable AttributeSet attrs) { super(context, attrs); init(); }
++	public PreferenceVoiceModelStatus(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr) { super(context, attrs, defStyleAttr); init(); }
++	public PreferenceVoiceModelStatus(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr, int defStyleRes) { super(context, attrs, defStyleAttr, defStyleRes); init(); }
++
++
++	private void init() {
++		setKey(NAME);
++		setTitle(R.string.pref_voice_model_status);
++		setPersistent(false);
++	}
++
++
++	@Override
++	public void onAttached() {
++		super.onAttached();
++		ModelDownloader.addListener(getContext(), this);
++		PreferenceManager.getDefaultSharedPreferences(getContext()).registerOnSharedPreferenceChangeListener(this);
++		refresh();
++	}
++
++
++	@Override
++	public void onDetached() {
++		ModelDownloader.removeListener(getContext(), this);
++		PreferenceManager.getDefaultSharedPreferences(getContext()).unregisterOnSharedPreferenceChangeListener(this);
++		super.onDetached();
++	}
++
++
++	@Override
++	public void onModelDownloadChanged(@NonNull ModelDownloads.Change change, @NonNull ModelDownloads.Snapshot snapshot) {
++		refresh();
++	}
++
++
++	@Override
++	public void onSharedPreferenceChanged(SharedPreferences preferences, @Nullable String key) {
++		if (VoiceModelSetting.KEY.equals(key)) {
++			refresh();
++		}
++	}
++
++
++	@Override
++	protected void onClick() {
++		ModelData model = VoiceModelSetting.get(getContext());
++		if (!model.isBuiltinAsset && !ModelDownloader.isDownloaded(getContext(), model)) {
++			ModelDownloader.start(getContext(), model);
++		}
++	}
++
++
++	private void refresh() {
++		setSummary(describe());
++	}
++
++
++	@NonNull
++	private String describe() {
++		Context c = getContext();
++		ModelData model = VoiceModelSetting.get(c);
++
++		if (model.isBuiltinAsset) {
++			String reason = WhistleEngine.unavailableReason(c);
++			return reason == null
++				? c.getString(R.string.voice_model_status_whistle_ready)
++				: c.getString(R.string.voice_model_status_whistle_unavailable, reason);
++		}
++
++		String note = model.isEnglishOnly() ? " " + c.getString(R.string.voice_model_status_english_only) : "";
++
++		if (ModelDownloader.isDownloaded(c, model)) {
++			return c.getString(R.string.voice_model_status_ready, model.sizeMb()) + note;
++		}
++
++		ModelDownloads.Snapshot download = ModelDownloader.snapshot(c);
++		if (download.model != null && download.model.id.equals(model.id)) {
++			if (download.status == ModelDownloads.Status.DOWNLOADING) {
++				return c.getString(R.string.voice_model_status_downloading, download.percent(), model.sizeMb()) + note;
++			}
++			if (download.status == ModelDownloads.Status.FAILED) {
++				return c.getString(R.string.voice_model_status_failed, download.error) + note;
++			}
++		}
++
++		return c.getString(R.string.voice_model_status_missing, model.sizeMb()) + note;
++	}
++}
 diff --git a/app/src/main/java/io/github/sspanak/tt9/ui/tray/StatusBar.java b/app/src/main/java/io/github/sspanak/tt9/ui/tray/StatusBar.java
 index 481773e4dc45d0d3f9ddd4b19fe2eb813dff95a4..3b8439d13de424f5312e214ddb11134c65096440 100644
 --- a/app/src/main/java/io/github/sspanak/tt9/ui/tray/StatusBar.java
@@ -42005,6 +42894,92 @@ index 7e4a646771f94206d1d21cfc38f2e54bcadfbe30..0ad82efd6e4a996b716dcaf0635772e0
  	<string name="voice_input_mic_permission_is_needed">You must allow the microphone permission to use voice input.</string>
  	<string name="voice_input_error_incompatible_voice_service">Incompatible voice assistant</string>
  	<string name="voice_input_error_generic">Voice input error</string>
+diff --git a/app/src/main/res/values/strings_voice_model.xml b/app/src/main/res/values/strings_voice_model.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..b1194a697235d218eb1e3e1d5cb571ea1ab4f253
+--- /dev/null
++++ b/app/src/main/res/values/strings_voice_model.xml
+@@ -0,0 +1,25 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++	<string name="pref_voice_model">Voice input model</string>
++	<string name="pref_voice_model_status">Model status</string>
++
++	<string name="voice_model_entry_whistle">Whistle · built in</string>
++	<string name="voice_model_entry_english">English %1$s · %2$d MB download</string>
++	<string name="voice_model_entry_multilingual">Multilingual %1$s · %2$d MB download</string>
++
++	<string name="voice_model_status_whistle_ready">Built in, works offline. Understands English, German, French, Spanish, Italian, Dutch and Polish. Other languages use Multilingual Tiny, which is downloaded.</string>
++	<string name="voice_model_status_whistle_unavailable">Whistle cannot run on this phone: %1$s. A Whisper model is used instead.</string>
++	<string name="voice_model_status_ready">Downloaded and ready (%1$d MB).</string>
++	<string name="voice_model_status_downloading">Downloading… %1$d%% of %2$d MB.</string>
++	<string name="voice_model_status_failed">Download failed: %1$s. Tap to try again.</string>
++	<string name="voice_model_status_missing">Not downloaded yet (%1$d MB). Tap to download it.</string>
++	<string name="voice_model_status_english_only">English only. Other languages use Whistle where it can, or Multilingual Tiny.</string>
++
++	<string name="voice_model_toast_started">Downloading %1$s (%2$d MB)…</string>
++	<string name="voice_model_toast_ready">%1$s is ready.</string>
++	<string name="voice_model_toast_failed">Could not download %1$s: %2$s</string>
++
++	<string name="voice_model_whistle_unavailable">Whistle unavailable: %1$s. Using %2$s instead.</string>
++	<string name="voice_model_using_whistle">Using Whistle while %1$s downloads.</string>
++	<string name="voice_model_wait">%1$s is downloading (%2$d%%). Try voice input again when it is done.</string>
++</resources>
+diff --git a/app/src/main/res/xml/prefs.xml b/app/src/main/res/xml/prefs.xml
+index c2c35b24b966438ec86ce02293671187aea0223f..a52d119a57c988701a38209d134f0f4fac576332 100644
+--- a/app/src/main/res/xml/prefs.xml
++++ b/app/src/main/res/xml/prefs.xml
+@@ -8,7 +8,7 @@
+ 		app:title="@string/pref_help">
+ 		<intent
+ 			android:action="android.intent.action.VIEW"
+-			android:targetPackage="io.github.sspanak.tt9"
++			android:targetPackage="com.jmtditech.tt9"
+ 			android:targetClass="io.github.sspanak.tt9.preferences.HelpActivity" />
+ 	</Preference>
+ 
+@@ -26,6 +26,10 @@
+ 		app:fragment="io.github.sspanak.tt9.preferences.KeyPadScreen"
+ 		app:key="screen_keypad"
+ 		app:title="@string/pref_category_keypad" />
++
++	<io.github.sspanak.tt9.preferences.screens.voice.DropDownVoiceModel app:defaultValue="whistle" />
++
++	<io.github.sspanak.tt9.preferences.screens.voice.PreferenceVoiceModelStatus />
+ 
+ 	<Preference
+ 		app:fragment="io.github.sspanak.tt9.preferences.SetupScreen"
+@@ -46,7 +50,7 @@
+ 			app:summary="@string/english_only">
+ 			<intent
+ 				android:action="android.intent.action.VIEW"
+-				android:targetPackage="io.github.sspanak.tt9"
++				android:targetPackage="com.jmtditech.tt9"
+ 				android:targetClass="io.github.sspanak.tt9.preferences.PrivacyPolicyActivity" />
+ 		</Preference>
+ 
+diff --git a/app/src/main/res/xml/prefs_screen_debug.xml b/app/src/main/res/xml/prefs_screen_debug.xml
+index 063d52f70d011cc1cc4c3cdbe0302b03d88a02ed..c7aacf91bb920708e52477da4ee245c0fc5f0d21 100644
+--- a/app/src/main/res/xml/prefs_screen_debug.xml
++++ b/app/src/main/res/xml/prefs_screen_debug.xml
+@@ -11,7 +11,7 @@
+ 		app:title="Test Input">
+ 		<intent
+ 			android:action="android.intent.action.VIEW"
+-			android:targetPackage="io.github.sspanak.tt9"
++			android:targetPackage="com.jmtditech.tt9"
+ 			android:targetClass="io.github.sspanak.tt9.preferences.screens.debug.TestInputActivity" />
+ 	</Preference>
+ 
+@@ -45,7 +45,7 @@
+ 			app:title="Recent Log Messages...">
+ 			<intent
+ 				android:action="android.intent.action.VIEW"
+-				android:targetPackage="io.github.sspanak.tt9"
++				android:targetPackage="com.jmtditech.tt9"
+ 				android:targetClass="io.github.sspanak.tt9.preferences.LogsActivity" />
+ 		</Preference>
+ 	</PreferenceCategory>
 diff --git a/app/validate-languages.gradle b/app/validate-languages.gradle
 index bcc0627f0dfe4bbfa208b93a7819fa9f3824806d..560a205114c824afc97f1473e58fd71d382a7949 100644
 --- a/app/validate-languages.gradle
