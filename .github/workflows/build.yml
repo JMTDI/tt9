@@ -1,8 +1,8 @@
 name: Build tt9 + FUTO
 
 # Watches sspanak/tt9 for new release tags, applies the FUTO/Whisper patch,
-# builds, lets Puter AI fix patch conflicts / build errors, then publishes a
-# signed APK as a GitHub release.
+# builds, lets Puter AI fix patch conflicts / build errors, publishes a
+# signed APK as a GitHub release, then sends it to the OSS app store (publish-oss job).
 #
 # Secrets (Settings > Secrets and variables > Actions):
 #   AI_API_KEY         API key for the AI provider (NVIDIA nvapi-..., Puter token, etc.)
@@ -11,6 +11,10 @@ name: Build tt9 + FUTO
 #   KEYSTORE_PASSWORD  keystore password
 #   KEY_ALIAS          key alias inside the keystore
 #   KEY_PASSWORD       key password
+#   OSS_UPLOAD_TOKEN   bearer token of the OSS app store; the publish-oss job uploads the signed APK(s) with it
+#
+# Optional repository variable (Settings > Secrets and variables > Actions > Variables):
+#   OSS_APK_FLAVORS    which APKs the publish-oss job uploads, space separated (default "full", e.g. "full lite")
 
 on:
   schedule:
@@ -52,6 +56,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 300
+    outputs:
+      tag: ${{ steps.ver.outputs.tag }}
+      published: ${{ steps.release.outputs.published }}
     steps:
       - name: Check out this repo (patch + scripts)
         uses: actions/checkout@v5
@@ -211,6 +218,7 @@ jobs:
           echo "sha=$(git -C ci rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Publish release
+        id: release
         if: steps.ver.outputs.build == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -249,6 +257,7 @@ jobs:
           gh release create "$REL" dist/*.apk dist/SHA256SUMS "dist/futo-${TAG}.patch" \
             --repo "$GITHUB_REPOSITORY" --target "${{ steps.patch.outputs.sha }}" \
             --title "tt9 $TAG + FUTO" --notes-file notes.md
+          echo "published=true" >> "$GITHUB_OUTPUT"
 
       - name: Upload logs on failure
         if: failure() && steps.ver.outputs.build == 'true'
@@ -286,3 +295,37 @@ jobs:
           else
             gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body-file issue.md
           fi
+
+  # The OSS app store upload is a job of its own, so a store outage can neither hide nor undo the GitHub release above,
+  # and "Re-run failed jobs" repeats only the upload. It sends the very files the release has, after checking them
+  # against SHA256SUMS. Which APKs go (default: full) is set by the OSS_APK_FLAVORS repository variable.
+  publish-oss:
+    name: Publish to the OSS app store
+    needs: build
+    if: needs.build.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Check out this repo (upload script)
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Download the signed APKs from the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh release download "$TAG-futo" --repo "$GITHUB_REPOSITORY" --dir dist --pattern '*.apk' --pattern SHA256SUMS
+          (cd dist && sha256sum --check --strict SHA256SUMS)
+
+      - name: Publish to the OSS app store
+        env:
+          OSS_UPLOAD_TOKEN: ${{ secrets.OSS_UPLOAD_TOKEN }}
+          OSS_PUBLISH_URL: https://app.offlinesoftware.solutions:5000/api/appstore/publish
+          OSS_APK_FLAVORS: ${{ vars.OSS_APK_FLAVORS || 'full' }}
+        run: bash .github/scripts/publish_oss.sh dist

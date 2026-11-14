@@ -117,6 +117,7 @@ flowchart LR
     A --> B["build<br/>lite + full"]
     B --> S["sign<br/>the APKs"]
     S --> R["publish release<br/>vX.Y-futo"]
+    R --> O["upload to the<br/>OSS app store"]
     B -. "conflict or build error" .-> F["AI fixes the files,<br/>then builds again"]
     F -.-> B
 ```
@@ -134,6 +135,8 @@ flowchart LR
    auto-generated notes (including which files the AI edited) and the exact patch used.
 6. Saves the final, possibly AI-resolved, patch back to `patch/futo.patch`, so the next upstream
    release starts from it and usually applies cleanly.
+7. In a separate job, uploads the signed `full` APK of that release to the OSS app store
+   (see [Publishing to the OSS app store](#publishing-to-the-oss-app-store)).
 
 If it never builds: logs are uploaded as an artifact and an issue is opened. Nothing is released.
 
@@ -192,7 +195,7 @@ exact patch used is attached to the release for you to read.
 
 1. Push this repo's contents to `JMTDI/tt9` **with git**. Whistle is downloaded during the build, so the repo stays small.
 2. Add these Actions secrets: `AI_API_KEY` (the older name `PUTER_AUTH_TOKEN` still works), `KEYSTORE_BASE64` (`base64 -w0 release.jks`),
-   `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
+   `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`, and `OSS_UPLOAD_TOKEN` (the OSS app store's bearer token).
 3. Settings > Actions > General > Workflow permissions: **Read and write**.
 4. Run the workflow manually once (Actions > Build tt9 + FUTO > Run workflow).
 
@@ -200,6 +203,27 @@ exact patch used is attached to the release for you to read.
 
 Run the workflow with **force** ticked. It rebuilds the newest upstream tag and replaces the existing `<tag>-futo` release, but only
 after the build has succeeded, so a failed build leaves the current release alone.
+
+### Publishing to the OSS app store
+
+Once a release is published, the `publish-oss` job downloads that release's APKs, checks them against `SHA256SUMS` and uploads
+them with [`publish_oss.sh`](.github/scripts/publish_oss.sh): one `POST` per APK, the raw file as the body, authorised with the
+`OSS_UPLOAD_TOKEN` secret, to `https://app.offlinesoftware.solutions:5000/api/appstore/publish`.
+
+- **Which APKs:** `full` only, by default. It is the one that works offline, and `lite` has the same app ID, so what the store does with a
+  second upload is up to the store. Set the repository variable `OSS_APK_FLAVORS` to `lite` or `full lite` to change it.
+- **When:** only after a release was actually published, that is for a new upstream tag or a run with *force* ticked. The daily
+  run that finds nothing new uploads nothing.
+- **A job of its own,** so a store outage never undoes the GitHub release. If an upload fails, use *Re-run failed jobs* on the run:
+  it uploads again without rebuilding. A missing `OSS_UPLOAD_TOKEN` fails the job with a message that names it.
+- **To upload a release that already exists** (for example `v64.0-futo`) without rebuilding, run this in a clone of the repo:
+
+  ```bash
+  gh release download v64.0-futo --pattern '*-full.apk' --pattern SHA256SUMS --dir dist
+  (cd dist && sha256sum --check --ignore-missing SHA256SUMS)
+  read -rs OSS_UPLOAD_TOKEN; export OSS_UPLOAD_TOKEN
+  OSS_PUBLISH_URL=https://app.offlinesoftware.solutions:5000/api/appstore/publish bash .github/scripts/publish_oss.sh dist
+  ```
 
 ### Notes
 
