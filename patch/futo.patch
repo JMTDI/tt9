@@ -2,7 +2,7 @@ diff --git a/app/build.gradle b/app/build.gradle
 index 595ea4bd6068168618dbdec0de9eba058a03f700..261866d5ae1e2fe200ee59f061a3c3c73a66cb0a 100644
 --- a/app/build.gradle
 +++ b/app/build.gradle
-@@ -158,7 +158,7 @@
+@@ -158,7 +158,7 @@ android {
  	compileSdk = 37
  
  	defaultConfig {
@@ -11,7 +11,7 @@ index 595ea4bd6068168618dbdec0de9eba058a03f700..261866d5ae1e2fe200ee59f061a3c3c7
  		buildFeatures.buildConfig = true
  		minSdk = 24
  		targetSdk = 37
-@@ -193,6 +193,15 @@
+@@ -193,6 +193,15 @@ android {
  		targetCompatibility JavaVersion.VERSION_17
  	}
  
@@ -27,13 +27,10 @@ index 595ea4bd6068168618dbdec0de9eba058a03f700..261866d5ae1e2fe200ee59f061a3c3c7
  	flavorDimensions = ['app']
  	productFlavors {
  		full {
-@@ -209,6 +218,21 @@
- 			dimension 'app'
- 			buildConfigField 'Boolean', 'LITE', 'true'
- 			buildConfigField 'Boolean', 'PREMIUM', 'true'
-+		}
-+	}
-+
+@@ -212,6 +221,21 @@ android {
+ 		}
+ 	}
+ 
 +	// Make lite and premium flavors share full's source files
 +	sourceSets {
 +		// The Whisper model lives in src/main/ml and must end up in the APK assets,
@@ -46,9 +43,12 @@ index 595ea4bd6068168618dbdec0de9eba058a03f700..261866d5ae1e2fe200ee59f061a3c3c7
 +		}
 +		premium {
 +			java.srcDirs += 'src/full/java'
- 		}
- 	}
- 
++		}
++	}
++
+ 	androidComponents {
+ 		onVariants(selector().all()) { variant ->
+ 			def variantName = variant.name.capitalize()
 diff --git a/app/dictionary-tools.gradle b/app/dictionary-tools.gradle
 index 7ca4d45a5691744673911b378ddceb8e691215b0..4fb4f71eae995b9b88ab2d5ab307ca6c30a87a53 100644
 --- a/app/dictionary-tools.gradle
@@ -40681,7 +40681,7 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436
  
  
  	public VoiceInputOps(
-@@ -42,24 +80,401 @@
+@@ -42,187 +80,413 @@ public class VoiceInputOps {
  		@Nullable Consumer<String> onPartial,
  		@Nullable Consumer<VoiceInputError> onError
  	) {
@@ -40701,43 +40701,71 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436
 +		this.audioSamples = FloatBuffer.allocate(INITIAL_BUFFER_SIZE);
  	}
  
+-
+-	static String getLocale(@NonNull Language lang) {
+-		return lang.getLocale().toString().replace("_", "-");
 +	public boolean isAvailable() {
 +		// There is always something to run: Whistle is bundled, and when it cannot be used (unsupported CPU,
 +		// or a language it does not cover) the multilingual model is downloaded on first use.
 +		return true;
-+	}
+ 	}
  
--	static String getLocale(@NonNull Language lang) {
 +	public boolean isListening() {
 +		return isListening || isProcessing;
 +	}
-+
+ 
+-	static Intent createIntent(@Nullable String locale) {
+-		Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+-		intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+-		intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+-		if (locale != null) {
+-			intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale);
 +	public void listen(@Nullable Language language) {
 +		if (language == null) {
 +			Logger.e(LOG_TAG, "listen() called with NULL language");
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_INVALID_LANGUAGE));
 +			return;
-+		}
-+
+ 		}
+-		return intent;
+-	}
+ 
 +		Logger.d(LOG_TAG, "listen() called with language: " + language.getName() + " (" + language.getLocale().getLanguage() + ")");
-+
+ 
+-	private void createGoogleRecognizer(@Nullable Language language) {
+-		boolean isLanguageAllowedOffline = language != null && !Boolean.TRUE.equals(isOfflineModeDisabled.get(language.getId()));
 +		if (isListening || isProcessing) {
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_RECOGNIZER_BUSY));
 +			return;
 +		}
-+
+ 
+-		if (isLanguageAllowedOffline && DeviceInfo.AT_LEAST_ANDROID_13 && recognizerSupport.isLanguageSupportedOffline(ims, language)) {
+-			Logger.d(LOG_TAG, "Creating offline SpeechRecognizer...");
+-			speechRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(ims);
+-		} else if (recognizerSupport.isGoogleOnlineRecognitionAvailable(ims)) {
+-			Logger.d(LOG_TAG, "Creating online SpeechRecognizer...");
+-			speechRecognizer = SpeechRecognizer.createSpeechRecognizer(ims);
+-		} else {
+-			Logger.d(LOG_TAG, "Cannot create SpeechRecognizer, recognition not available.");
+-			speechRecognizer = null;
 +		if (isLoadingModel) {
 +			Logger.d(LOG_TAG, "A voice model is already loading, ignoring the request");
-+			return;
-+		}
-+
+ 			return;
+ 		}
+ 
+-		speechRecognizer.setRecognitionListener(listener);
+-	}
 +		if (ActivityCompat.checkSelfPermission(ims, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_NO_PERMISSION));
 +			return;
 +		}
-+
+ 
 +		this.language = language;
-+
+ 
+-	public boolean isAvailable() {
+-		return
+-			recognizerSupport.isAlternativeAvailable(ims)
+-			|| recognizerSupport.isGoogleOnlineRecognitionAvailable(ims)
+-			|| recognizerSupport.isGoogleOfflineRecognitionAvailable(ims);
 +		isLoadingModel = true;
 +		try {
 +			// Picks the model, gets it ready without blocking the main thread, and then starts recording
@@ -40747,8 +40775,8 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436
 +			isLoadingModel = false;
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_PROCESSING));
 +		}
-+	}
-+
+ 	}
+ 
 +	private void startRecording() {
 +		try {
 +			// Model should already be loaded by loadModelAsync
@@ -40757,19 +40785,31 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436
 +				AudioFormat.CHANNEL_IN_MONO,
 +				AudioFormat.ENCODING_PCM_16BIT
 +			);
-+
+ 
+-	public boolean isListening() {
+-		return listener.isListening() && speechRecognizer != null;
+-	}
+-
 +			if (bufferSize == AudioRecord.ERROR || bufferSize == AudioRecord.ERROR_BAD_VALUE) {
 +				postError(new VoiceInputError(ims, VoiceInputError.ERROR_AUDIO_CAPTURE));
 +				return;
 +			}
-+
+ 
+-	public void listen(@Nullable Language language) {
+-		this.language = language;
+-		if (forceAlternativeInput || recognizerSupport.isAlternativeAvailable(ims)) {
+-			ims.startActivity(VoiceInputPickerActivity.generateShowIntent(ims));
+-		} else {
+-			recognizerSupport.setLanguage(language).checkOfflineSupport(
+-				ims,
+-				() -> new Handler(Looper.getMainLooper()).post(this::listen)
 +			audioRecord = new AudioRecord(
 +				MediaRecorder.AudioSource.VOICE_RECOGNITION,
 +				SAMPLE_RATE,
 +				AudioFormat.CHANNEL_IN_MONO,
 +				AudioFormat.ENCODING_PCM_16BIT,
 +				bufferSize * 4
-+			);
+ 			);
 +
 +			if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
 +				postError(new VoiceInputError(ims, VoiceInputError.ERROR_AUDIO_CAPTURE));
@@ -40796,9 +40836,9 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436
 +		} catch (Exception e) {
 +			Logger.e(LOG_TAG, "Failed to start recording: " + e.getMessage());
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_AUDIO_CAPTURE));
-+		}
-+	}
-+
+ 		}
+ 	}
+ 
 +	/**
 +	 * Works out which model to use for the current language and the "Voice input model" setting, and gets it ready
 +	 * without blocking the main thread. onComplete runs on the main thread when recording can start.
@@ -40822,35 +40862,52 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436
 +		if (choice.download != null) {
 +			ModelDownloader.start(ims, choice.download); // does nothing when it is already on its way
 +		}
-+
+ 
+-	private void listen() {
+-		if (language == null) {
+-			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_INVALID_LANGUAGE));
+-			return;
 +		if (choice.whistleUnavailable) {
 +			// Whistle was chosen and covers this language, so another model is a surprise: say why it is being used.
 +			String reason = WhistleEngine.unavailableReason(ims);
 +			Logger.e(LOG_TAG, "Whistle not used for " + langCode + ": " + reason);
 +			showToast(ims.getString(R.string.voice_model_whistle_unavailable, reason, choice.wanted.displayName()), Toast.LENGTH_LONG);
-+		}
-+
+ 		}
+ 
+-		if (isListening()) {
+-			onListeningError.accept(new VoiceInputError(ims, SpeechRecognizer.ERROR_RECOGNIZER_BUSY));
 +		if (choice.run == null) {
 +			ModelDownloads.Snapshot download = ModelDownloader.snapshot(ims);
 +			boolean isWanted = download.model != null && download.model.id.equals(choice.wanted.id);
 +			showToast(ims.getString(R.string.voice_model_wait, choice.wanted.displayName(), isWanted ? download.percent() : 0), Toast.LENGTH_LONG);
 +			isLoadingModel = false;
 +			postResult(""); // ends the attempt, there is nothing to insert
-+			return;
-+		}
-+
+ 			return;
+ 		}
+ 
+-		createGoogleRecognizer(language);
+-		if (speechRecognizer == null) {
+-			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_NOT_AVAILABLE));
+-			return;
 +		if (choice.whistleStandsIn) {
 +			showToast(ims.getString(R.string.voice_model_using_whistle, choice.wanted.displayName()), Toast.LENGTH_LONG);
-+		}
-+
+ 		}
+ 
+-		String locale = getLocale(language);
 +		executorService.submit(() -> loadModelBlocking(choice.run, onComplete));
 +	}
-+
+ 
 +	/**
 +	 * Loads the model. Blocks while the file is read and parsed, so it runs on the executor, not on the main thread.
 +	 */
 +	private void loadModelBlocking(@NonNull ModelData model, @NonNull Runnable onComplete) {
-+		try {
+ 		try {
+-			listener.onBeforeStart();
+-			speechRecognizer.startListening(createIntent(locale));
+-			Logger.d(LOG_TAG, "SpeechRecognizer started for locale: " + locale);
+-		} catch (SecurityException e) {
+-			Logger.e(LOG_TAG, "SpeechRecognizer start failed due to a SecurityException. " + e.getMessage());
+-			onError(new VoiceInputError(ims, VoiceInputError.ERROR_CANNOT_BIND_TO_VOICE_SERVICE));
 +			if (model.isBuiltinAsset) {
 +				// Whistle and the Whisper models are never needed together, so free the larger one
 +				closeWhisperModel();
@@ -40873,9 +40930,9 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436
 +			Logger.e(LOG_TAG, "Failed to load " + model.displayName() + ": " + e.getMessage());
 +			isLoadingModel = false;
 +			postError(new VoiceInputError(ims, VoiceInputError.ERROR_PROCESSING));
-+		}
-+	}
-+
+ 		}
+ 	}
+ 
 +	private void closeWhisperModel() {
 +		if (whisperModel != null) {
 +			whisperModel.close();
@@ -40883,7 +40940,11 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436
 +			currentModel = null;
 +		}
 +	}
-+
+ 
+-	public void stop() {
+-		this.language = null;
+-		if (speechRecognizer != null && isListening()) {
+-			speechRecognizer.stopListening();
 +private void showToast(String message, int duration) {
 +	mainHandler.post(() -> Toast.makeText(ims, message, duration).show());
 +}
@@ -40920,7 +40981,7 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436
 +					samplesRecorded++;
 +				}
 +			}
-+		}
+ 		}
 +
 +		// Recording stopped manually by user
 +		Logger.d(LOG_TAG, "Recording stopped by user");
@@ -40928,26 +40989,41 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436
 +	} catch (Exception e) {
 +		Logger.e(LOG_TAG, "Error during recording: " + e.getMessage());
 +		postError(new VoiceInputError(ims, VoiceInputError.ERROR_AUDIO_CAPTURE));
-+	}
+ 	}
 +}
-+
+ 
 +	public void stop() {
 +		if (!isListening) {
 +			return;
 +		}
-+
+ 
+-	private void destroy() {
+-		this.language = null;
 +		isListening = false;
 +		Logger.d(LOG_TAG, "Stopping recording");
-+
+ 
+-		// We try this multiple times, because it can fail due to a bug in the Android SDK
+-		// https://github.com/sspanak/tt9/issues/593
+-		for (int i = 0; i < 3 && speechRecognizer != null; i++) {
 +		// Stop recording
 +		if (audioRecord != null) {
-+			try {
+ 			try {
+-				speechRecognizer.destroy();
+-			} catch (IllegalArgumentException e) {
+-				if (i < 2) {
+-					Logger.e(LOG_TAG, "SpeechRecognizer destroy failed. " + e.getMessage() + ". Retrying...");
+-					continue;
+-				} else {
+-					Logger.e(LOG_TAG, "SpeechRecognizer destroy failed. " + e.getMessage() + ". Giving up and just nulling the reference.");
+-				}
 +				audioRecord.stop();
 +			} catch (Exception e) {
 +				Logger.e(LOG_TAG, "Error stopping AudioRecord: " + e.getMessage());
-+			}
+ 			}
 +		}
-+
+ 
+-			speechRecognizer = null;
+-			Logger.d(LOG_TAG, "SpeechRecognizer destroyed");
 +		// Cancel recording task
 +		if (recordingTask != null && !recordingTask.isDone()) {
 +			recordingTask.cancel(true);
@@ -40960,14 +41036,16 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436
 +			Logger.d(LOG_TAG, "Not enough audio recorded");
 +			cleanup();
 +			postResult(null);
-+		}
-+	}
-+
+ 		}
+ 	}
+ 
 +	private void processAudio() {
 +		if (isProcessing) {
 +			return;
 +		}
-+
+ 
+-	public boolean enableOfflineMode(@NonNull Language language, boolean yes) {
+-		boolean isCurrentlyAllowed = !Boolean.TRUE.equals(isOfflineModeDisabled.get(language.getId()));
 +		isProcessing = true;
 +		processingTask = executorService.submit(() -> {
 +			try {
@@ -40984,7 +41062,10 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436
 +					langCode = WhisperModels.mapLanguageCode(language.getLocale().getLanguage());
 +					Logger.d(LOG_TAG, "Processing audio for language: " + language.getName() + " (code: " + langCode + ")");
 +				}
-+
+ 
+-		if (yes != isCurrentlyAllowed) {
+-			isOfflineModeDisabled.put(language.getId(), !yes);
+-		}
 +				String result;
 +				if (usingWhistle) {
 +					Logger.d(LOG_TAG, "Running Whistle with language: " + langCode);
@@ -41004,7 +41085,8 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436
 +						true // Suppress non-speech tokens
 +					);
 +				}
-+
+ 
+-		return isCurrentlyAllowed != yes;
 +				Logger.d(LOG_TAG, "Recognition result: " + result);
 +				postResult(result);
 +
@@ -41019,12 +41101,14 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436
 +				cleanup();
 +			}
 +		});
-+	}
-+
+ 	}
+ 
 +	private void cleanup() {
 +		isProcessing = false;
 +		isListening = false;
-+
+ 
+-	public void enableOfflineMode() {
+-		isOfflineModeDisabled.replaceAll((i, v) -> false);
 +		if (audioRecord != null) {
 +			try {
 +				audioRecord.release();
@@ -41033,17 +41117,21 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436
 +			}
 +			audioRecord = null;
 +		}
-+
+ 
+-		Logger.d(LOG_TAG, "Re-enabled offline voice input for all languages");
 +		// Keep model loaded for faster next recognition (like FUTO does)
 +		// Model is only closed when switching between different models or on destroy()
 +
 +		audioSamples.clear();
 +		samplesRecorded = 0;
-+	}
-+
+ 	}
+ 
 +	public void destroy() {
 +		cleanup();
-+
+ 
+-	public VoiceInputOps forceAlternativeInput(boolean yes) {
+-		forceAlternativeInput = yes;
+-		return this;
 +		// Close Whisper model
 +		if (whisperModel != null) {
 +			whisperModel.close();
@@ -41054,27 +41142,34 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436
 +		if (executorService != null && !executorService.isShutdown()) {
 +			executorService.shutdownNow();
 +		}
-+	}
-+
+ 	}
+ 
 +	private void postResult(String result) {
 +		mainHandler.post(() -> onStopListening.accept(result));
 +	}
-+
+ 
+-	private void onStop(@NonNull ArrayList<String> results) {
+-		destroy();
+-		onStopListening.accept(results.isEmpty() ? null : results.get(0));
 +	private void postError(VoiceInputError error) {
 +		cleanup();
 +		mainHandler.post(() -> onListeningError.accept(error));
-+	}
-+
+ 	}
+ 
 +	// Legacy compatibility methods
 +	public boolean enableOfflineMode(@NonNull Language language, boolean yes) {
 +		// Always offline, nothing to do
 +		return false;
 +	}
-+
+ 
+-	private void onPartial(@NonNull ArrayList<String> results) {
+-		if (!results.isEmpty()) {
+-			onPartialResult.accept(results.get(0));
+-		}
 +	public void enableOfflineMode() {
 +		// Always offline, nothing to do
-+	}
-+
+ 	}
+ 
 +	/**
 +	 * Upstream can hand over to an external voice input app (e.g. Futo Voice). This build always uses
 +	 * the built-in Whisper engine, so there is nothing to switch; the method only keeps callers compiling.
@@ -41082,172 +41177,25 @@ index c2fb0899084cdab29758ef05a1d47ddc4603a7a2..8de813139834844c5e332525ddd3c436
 +	public VoiceInputOps forceAlternativeInput(boolean yes) {
 +		return this;
 +	}
-+
-+	// Used by upstream's SpeechRecognizerSupport* and VoiceInputPickerActivity. Whisper itself does not need them.
-+	public static String getLocale(@NonNull Language lang) {
- 		return lang.getLocale().toString().replace("_", "-");
- 	}
  
--
--	static Intent createIntent(@Nullable String locale) {
-+	public static Intent createIntent(@Nullable String locale) {
- 		Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
- 		intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
- 		intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
-@@ -69,160 +484,9 @@
- 		return intent;
- 	}
- 
--
--	private void createGoogleRecognizer(@Nullable Language language) {
--		boolean isLanguageAllowedOffline = language != null && !Boolean.TRUE.equals(isOfflineModeDisabled.get(language.getId()));
--
--		if (isLanguageAllowedOffline && DeviceInfo.AT_LEAST_ANDROID_13 && recognizerSupport.isLanguageSupportedOffline(ims, language)) {
--			Logger.d(LOG_TAG, "Creating offline SpeechRecognizer...");
--			speechRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(ims);
--		} else if (recognizerSupport.isGoogleOnlineRecognitionAvailable(ims)) {
--			Logger.d(LOG_TAG, "Creating online SpeechRecognizer...");
--			speechRecognizer = SpeechRecognizer.createSpeechRecognizer(ims);
--		} else {
--			Logger.d(LOG_TAG, "Cannot create SpeechRecognizer, recognition not available.");
--			speechRecognizer = null;
--			return;
--		}
--
--		speechRecognizer.setRecognitionListener(listener);
--	}
--
--
--	public boolean isAvailable() {
--		return
--			recognizerSupport.isAlternativeAvailable(ims)
--			|| recognizerSupport.isGoogleOnlineRecognitionAvailable(ims)
--			|| recognizerSupport.isGoogleOfflineRecognitionAvailable(ims);
--	}
--
--
--	public boolean isListening() {
--		return listener.isListening() && speechRecognizer != null;
--	}
--
--
--	public void listen(@Nullable Language language) {
--		this.language = language;
--		if (forceAlternativeInput || recognizerSupport.isAlternativeAvailable(ims)) {
--			ims.startActivity(VoiceInputPickerActivity.generateShowIntent(ims));
--		} else {
--			recognizerSupport.setLanguage(language).checkOfflineSupport(
--				ims,
--				() -> new Handler(Looper.getMainLooper()).post(this::listen)
--			);
--		}
--	}
--
--
--	private void listen() {
--		if (language == null) {
--			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_INVALID_LANGUAGE));
--			return;
--		}
--
--		if (isListening()) {
--			onListeningError.accept(new VoiceInputError(ims, SpeechRecognizer.ERROR_RECOGNIZER_BUSY));
--			return;
--		}
--
--		createGoogleRecognizer(language);
--		if (speechRecognizer == null) {
--			onListeningError.accept(new VoiceInputError(ims, VoiceInputError.ERROR_NOT_AVAILABLE));
--			return;
--		}
--
--		String locale = getLocale(language);
--
--		try {
--			listener.onBeforeStart();
--			speechRecognizer.startListening(createIntent(locale));
--			Logger.d(LOG_TAG, "SpeechRecognizer started for locale: " + locale);
--		} catch (SecurityException e) {
--			Logger.e(LOG_TAG, "SpeechRecognizer start failed due to a SecurityException. " + e.getMessage());
--			onError(new VoiceInputError(ims, VoiceInputError.ERROR_CANNOT_BIND_TO_VOICE_SERVICE));
--		}
--	}
--
--
--	public void stop() {
--		this.language = null;
--		if (speechRecognizer != null && isListening()) {
--			speechRecognizer.stopListening();
--		}
--	}
--
--
--	private void destroy() {
--		this.language = null;
--
--		// We try this multiple times, because it can fail due to a bug in the Android SDK
--		// https://github.com/sspanak/tt9/issues/593
--		for (int i = 0; i < 3 && speechRecognizer != null; i++) {
--			try {
--				speechRecognizer.destroy();
--			} catch (IllegalArgumentException e) {
--				if (i < 2) {
--					Logger.e(LOG_TAG, "SpeechRecognizer destroy failed. " + e.getMessage() + ". Retrying...");
--					continue;
--				} else {
--					Logger.e(LOG_TAG, "SpeechRecognizer destroy failed. " + e.getMessage() + ". Giving up and just nulling the reference.");
--				}
--			}
--
--			speechRecognizer = null;
--			Logger.d(LOG_TAG, "SpeechRecognizer destroyed");
--		}
--	}
--
--
--	public boolean enableOfflineMode(@NonNull Language language, boolean yes) {
--		boolean isCurrentlyAllowed = !Boolean.TRUE.equals(isOfflineModeDisabled.get(language.getId()));
--
--		if (yes != isCurrentlyAllowed) {
--			isOfflineModeDisabled.put(language.getId(), !yes);
--		}
--
--		return isCurrentlyAllowed != yes;
--	}
--
--
--	public void enableOfflineMode() {
--		isOfflineModeDisabled.replaceAll((i, v) -> false);
--
--		Logger.d(LOG_TAG, "Re-enabled offline voice input for all languages");
--	}
--
--
--	public VoiceInputOps forceAlternativeInput(boolean yes) {
--		forceAlternativeInput = yes;
--		return this;
--	}
--
--
--	private void onStop(@NonNull ArrayList<String> results) {
--		destroy();
--		onStopListening.accept(results.isEmpty() ? null : results.get(0));
--	}
--
--
--	private void onPartial(@NonNull ArrayList<String> results) {
--		if (!results.isEmpty()) {
--			onPartialResult.accept(results.get(0));
--		}
--	}
--
--
 -	private void onError(VoiceInputError error) {
 -		destroy();
 -		onListeningError.accept(error);
--	}
--
--
++	// Used by upstream's SpeechRecognizerSupport* and VoiceInputPickerActivity. Whisper itself does not need them.
++	public static String getLocale(@NonNull Language lang) {
++		return lang.getLocale().toString().replace("_", "-");
+ 	}
+ 
++	public static Intent createIntent(@Nullable String locale) {
++		Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
++		intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
++		intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
++		if (locale != null) {
++			intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale);
++		}
++		return intent;
++	}
+ 
  	@NonNull
  	@Override
  	public String toString() {
@@ -42938,17 +42886,17 @@ index c2c35b24b966438ec86ce02293671187aea0223f..a52d119a57c988701a38209d134f0f4f
  			android:targetClass="io.github.sspanak.tt9.preferences.HelpActivity" />
  	</Preference>
  
-@@ -26,6 +26,10 @@
- 		app:fragment="io.github.sspanak.tt9.preferences.KeyPadScreen"
+@@ -27,6 +27,10 @@
  		app:key="screen_keypad"
  		app:title="@string/pref_category_keypad" />
-+
+ 
 +	<io.github.sspanak.tt9.preferences.screens.voice.DropDownVoiceModel app:defaultValue="whistle" />
 +
 +	<io.github.sspanak.tt9.preferences.screens.voice.PreferenceVoiceModelStatus />
- 
++
  	<Preference
  		app:fragment="io.github.sspanak.tt9.preferences.SetupScreen"
+ 		app:key="screen_setup"
 @@ -46,7 +50,7 @@
  			app:summary="@string/english_only">
  			<intent
