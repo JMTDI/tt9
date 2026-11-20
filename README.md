@@ -38,8 +38,8 @@ publishes the APKs. There is no fork to keep in sync; the whole difference from 
 
    | APK | What it is |
    | --- | --- |
-   | `tt9-futo-<version>-full.apk` | Everything built in, dictionaries included. Works with no Internet. Android 7.0+. |
-   | `tt9-futo-<version>-lite.apk` | Much smaller. Dictionaries are downloaded from GitHub when you add a language. Android 8.0+. |
+   | `tt9-futo-64.0-full.apk` | Everything built in, dictionaries included. Works with no Internet. Android 7.0+. |
+   | `tt9-futo-64.0-lite.apk` | Much smaller. Dictionaries are downloaded from GitHub when you add a language. Android 8.0+. |
 
 2. Open it and install. Android may first ask you to allow installs from your browser or file manager.
 3. Turn the keyboard on: **Settings → System → Languages & input → On-screen keyboard → Manage keyboards**, switch on
