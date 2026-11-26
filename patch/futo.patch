@@ -42819,7 +42819,7 @@ index 481773e4dc45d0d3f9ddd4b19fe2eb813dff95a4..3b8439d13de424f5312e214ddb11134c
  
  
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 7e4a646771f94206d1d21cfc38f2e54bcadfbe30..0ad82efd6e4a996b716dcaf0635772e09883676f 100644
+index da04d389423b79a0b17703586f895c4c3dae4545..619a0a22492bc944bea05c3af072de53cf99fc1d 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -2,7 +2,7 @@
@@ -42831,7 +42831,7 @@ index 7e4a646771f94206d1d21cfc38f2e54bcadfbe30..0ad82efd6e4a996b716dcaf0635772e0
  	<string name="system_night_mode" translatable="false">n</string>
  
  	<string name="app_settings">TT9 Settings</string>
-@@ -358,8 +358,8 @@
+@@ -360,8 +360,8 @@
  	<string name="virtual_key_shift" translatable="false">Shift</string>
  	<string name="virtual_key_space_korean">Space</string>
  
